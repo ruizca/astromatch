@@ -63,6 +63,7 @@ distribute-*.tar.gz
 .gitmodules
 .logcookie
 .travis.yml
+.rtd-environment.yml
 make_test_cats.py
 
 
