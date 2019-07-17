@@ -59,4 +59,10 @@ distribute-*.tar.gz
 # Mac OSX
 .DS_Store
 
+.pytest_cache/*
+.gitmodules
+.logcookie
+.travis.yml
 make_test_cats.py
+
+

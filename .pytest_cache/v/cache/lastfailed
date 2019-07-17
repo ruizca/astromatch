@@ -1,7 +1,0 @@
-{
-  "astromatch/tests/test_match.py::test_match_nway_cats_moc": true, 
-  "astromatch/tests/test_match.py::test_match_nway_cats_nomoc": true, 
-  "astromatch/tests/test_match.py::test_match_nway_params_moc": true, 
-  "astromatch/tests/test_match.py::test_match_nway_params_nomoc": true, 
-  "astromatch/tests/test_skycoorderr.py::test_circle_units": true
-}
