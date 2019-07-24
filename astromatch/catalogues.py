@@ -697,7 +697,8 @@ class Catalogue(object):
             # Assume first column is the SRCID
             id_col = data_table.colnames[0]
 
-        ids = data_table[id_col]
+        # set ids as strings
+        ids = data_table[id_col].astype(str)
 
         # Workaround for a bug in hdf5 with Python 3 
         # In python 3 strings are unicode by default, 
