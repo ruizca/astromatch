@@ -28,7 +28,7 @@ class BaseMatch(object):
     @property
     def priors(self):
         if self._priors is None:
-            raise AttributeError('Match has not been performed yet!')
+            raise AttributeError('No magnitude priors defined yet!')
         else:
             try:
                 if len(self.scats) == 1:                
@@ -175,8 +175,11 @@ class BaseMatch(object):
         #  with no match from '0.0' to ''
         for cat in self.scats:
             idcol = 'SRCID_{}'.format(cat.name)
-            mask = match[idcol] == '0.0'
-            match[idcol][mask] = ''
+            try:
+                mask = np.char.strip(match[idcol]) == b'0.0'
+                match[idcol][mask] = ''
+            except ValueError:
+                continue
 
         return match
 
