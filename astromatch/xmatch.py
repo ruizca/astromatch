@@ -328,7 +328,7 @@ class XMatch(BaseMatch):
             xms.logout()
 
             match = Table.read(match_file)
-            #os.remove(match_file)
+            os.remove(match_file)
 
             return match
 
@@ -578,9 +578,12 @@ class XMatch(BaseMatch):
                 total_bias += match[magbias_col]
 
         #match['post_weight'] = match['post_weight'] * 10**total_bias
-        match['p_single'] = 1/(1 + (1/match['dist_post'] - 1) * 10**total_bias)
+        match['p_single'] = 1/(1 + (1/match['dist_post'] - 1) / 10**total_bias)
 
-        mask = total_bias == 0.0
+        mask = np.logical_and(total_bias == 0.0, match['dist_post'] == 0.0)
+        match['p_single'][mask] = 0.0
+
+        mask = np.isneginf(total_bias)
         match['p_single'][mask] = 0.0
 
         match.remove_column('SIDX')
