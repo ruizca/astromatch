@@ -100,6 +100,9 @@ class NWMatch(BaseMatch):
 
         match = self._nway_add_srcids(match)
         
+        pcat_idcol = 'SRCID_{}'.format(self.pcat.name)
+        match = self._sort_as_pcat(match, pcat_idcol)
+
         return match
         
     def _nway_add_srcids(self, match):
