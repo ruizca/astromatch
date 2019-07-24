@@ -463,6 +463,12 @@ class LRMatch(BaseMatch):
         mask = np.logical_and(~mask, mask_ratio)
         match['match_flag'][mask] = 2
 
+        ## Flag as secondary matches with multiple counterparts
+        ## with LR_BEST == 0 and pi_max == 0
+        mask = np.logical_and(match['ncat'] > 1, match['LR_BEST'] == 0.0)
+        mask = np.logical_and(mask, pi_max == 0)
+        match['match_flag'][mask] = 2
+
         return match
 
     def _sort(self, match):
