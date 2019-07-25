@@ -155,7 +155,8 @@ class Match(object):
             cutoff, match_rnd  = self._calibrate_best_match(false_rate,
                                             calibrate_with_random_cat, **kwargs)
 
-        self._flag_best_match(cutoff, calibrate_with_random_cat)
+        self._match.flag_best_match(self._result, cutoff=cutoff)
+        #self._flag_best_match(cutoff, calibrate_with_random_cat)
 
         return match_rnd
         
@@ -168,6 +169,7 @@ class Match(object):
                                                ncutoff=ncutoff,
                                                plot_to_file=plot_to_file)
         return stats
+
 
     def __lr(self, **kwargs):
         log.info('Using LR method:')
@@ -192,7 +194,6 @@ class Match(object):
 
         return results
 
-    
     def __nway(self, **kwargs):
         from .nway import NWMatch
 
@@ -233,12 +234,8 @@ class Match(object):
 
         return cutoff, match_rnd
 
-    def _flag_best_match(self, cutoff, calibrate_with_random_cat):
-        if calibrate_with_random_cat:
-            self._match.flag_best_match_rndmatch(self._result, cutoff=cutoff)
-        else:
-            self._match.flag_best_match(self._result, cutoff)
-
+#    def _flag_best_match(self, cutoff, calibrate_with_random_cat):
+#        self._match.flag_best_match(self._result, cutoff=cutoff)
 
 #    @staticmethod
 #    def _parse_kwargs_lr(kwargs):

@@ -102,23 +102,13 @@ class BaseMatch(object):
 
         return stats
 
-    def flag_best_match(self, match, cutoff=None):
+    def flag_best_match(self, match, cutoff=None, match_rnd=None):
         if cutoff is None:
-            stats = self.stats(match)
-            cutoff = self._calc_cutoff(stats)
+            if match_rnd is None:
+                stats = self.stats(match)
+            else:
+                stats = self.stats_rndmatch(match, match_rnd)
 
-        mask = np.logical_and(match[self._cutoff_column] > cutoff,
-                              match['match_flag'] == 1)
-
-        match['best_match_flag'] = 0        
-        match['best_match_flag'][mask] = 1
-        
-        cutoff_str = '{} > {}'.format(self._cutoff_column, cutoff)
-        match.meta['best_match_cutoff'] = cutoff_str
-
-    def flag_best_match_rndmatch(self, match, match_rnd=None, cutoff=None):
-        if cutoff is None:
-            stats = self.stats_rndmatch(match, match_rnd)
             cutoff = self._calc_cutoff(stats)
 
         mask = np.logical_and(match[self._cutoff_column] > cutoff,
@@ -129,6 +119,22 @@ class BaseMatch(object):
 
         cutoff_str = '{} > {}'.format(self._cutoff_column, cutoff)
         match.meta['best_match_cutoff'] = cutoff_str
+
+        return cutoff
+
+#    def flag_best_match_rndmatch(self, match, match_rnd=None, cutoff=None):
+#        if cutoff is None:
+#            stats = self.stats_rndmatch(match, match_rnd)
+#            cutoff = self._calc_cutoff(stats)
+#
+#        mask = np.logical_and(match[self._cutoff_column] > cutoff,
+#                              match['match_flag'] == 1)
+#
+#        match['best_match_flag'] = 0        
+#        match['best_match_flag'][mask] = 1
+#
+#        cutoff_str = '{} > {}'.format(self._cutoff_column, cutoff)
+#        match.meta['best_match_cutoff'] = cutoff_str
 
     ### Internal methods
     def _calc_cutoff(self, stats, false_rate=None):
