@@ -48,7 +48,7 @@ class LRMatch(BaseMatch):
 
     _lr_all = None
     _bkg = None
-        
+    _cutoff_column = 'LR_BEST'
 
     ### Class Properties
     @property
@@ -180,17 +180,17 @@ class LRMatch(BaseMatch):
         return stats
 
     # Overrides the BaseMatch method
-    def flag_best_match(self, match, cutoff=None):
-        if cutoff is None:
-            stats = self.stats(match)
-            cutoff = self._calc_cutoff(stats)
-
-        mask = np.logical_and(match['LR_BEST'] > cutoff,
-                              match['match_flag'] == 1)
-
-        match['best_match_flag'] = 0        
-        match['best_match_flag'][mask] = 1        
-        match.meta['best_match_cutoff'] = 'LR_BEST > {}'.format(cutoff)
+#    def flag_best_match(self, match, cutoff=None):
+#        if cutoff is None:
+#            stats = self.stats(match)
+#            cutoff = self._calc_cutoff(stats)
+#
+#        mask = np.logical_and(match['LR_BEST'] > cutoff,
+#                              match['match_flag'] == 1)
+#
+#        match['best_match_flag'] = 0        
+#        match['best_match_flag'][mask] = 1        
+#        match.meta['best_match_cutoff'] = 'LR_BEST > {}'.format(cutoff)
 
     ### Internal Methods
     def _candidates(self):
