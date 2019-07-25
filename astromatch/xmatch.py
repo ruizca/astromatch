@@ -114,10 +114,16 @@ class XMatchServer(object):
 
         
     def logout(self):
+        """
+        logout from X-Match server.
+        """
         response = self.session.get(self.url, params=(('cmd', 'quit'),))        
         self._check_status(response)
 
     def logged(self):
+        """
+        Returns ``True`` if logged into the X-Match server, ``False`` otherwise.
+        """
         response = self.session.get(self.url, params=(('cmd', 'islogged'),))
 
         try:
@@ -129,6 +135,11 @@ class XMatchServer(object):
         return True
 
     def ls(self):
+        """
+        Returns an Astropy ``Table`` listing the files hosted in the X-Match
+        server. It contains four columns: creation date and time, size, and
+        name of the file.
+        """
         response = self.session.get(self.url, params=(('cmd', 'ls'),))
         self._check_status(response)
 
@@ -139,8 +150,13 @@ class XMatchServer(object):
         return ls_table
 
     def put(self, *args):
-        # args: files to be uploaded
-
+        """
+        Upload files into the X-Match server.
+        
+        Parameters
+        ----------
+        args : path of the files to be uploaded.
+        """
         for f in args:
             try:
                 basename  = os.path.basename(f)
@@ -157,7 +173,14 @@ class XMatchServer(object):
             self._check_status(response)
 
     def get(self, *args, **kwargs):
-        # args: files to download
+        """
+        Download files from the X-Match server.
+        
+        Parameters
+        ----------
+        args : files to be downloaded.
+        output_dir : path of the directory where files are downloaded.
+        """
         output_dir = kwargs.pop('output_dir', '.')
 
         for f in args:
@@ -177,6 +200,13 @@ class XMatchServer(object):
                     fp.write(response.content)
 
     def remove(self, *args):
+        """
+        Delete files in the X-Match server.
+        
+        Parameters
+        ----------
+        args : path of the files to be deleted.
+        """
         for f in args:
             data = {
               'cmd': 'rm',
@@ -186,6 +216,9 @@ class XMatchServer(object):
             self._check_status(response)
 
     def run(self, filename):
+        """
+        Execute the X-Match script contained in ``filename``.
+        """
         files = {
             'cmd': (None, 'xmatch'),
             'script': (os.path.basename(filename), open(filename, 'rb')),
@@ -235,7 +268,29 @@ class XMatch(BaseMatch):
             return self._match_raw
             
     ### Public Methods
-    def run(self, use_mags=False, xmatchserver_user=None, **kwargs):        
+    def run(self, use_mags=False, xmatchserver_user=None, **kwargs):
+        """
+        Perform the cross-matching between the defined catalogues.
+        
+        Parameters
+        ----------
+        xmatchserver_user : ``str`` or ``None``
+            user name for the X-Match server. If ``None``, anonymous access
+            is used. Defaults to ``None``.
+        use_mags : ``boolean``, optional
+            apply corrections to the association probabilities based on the
+            magnitudes of the counterpart sources. To this end, probability
+            priors are constructed for each magnitude contained in the
+            secondary catalogues. See ``Prior`` documentation for details on
+            how these are calculated. Defaults to ``False``.
+        mag_radius : ``Quantity``, optional
+            Search radius around sources in the primary catalogue for
+            building the magnitude priors. It must be an angular ``Quantity``.
+            Defaults to 6 arcsec.
+        prob_ratio_secondary : `float`, optional
+            Minimum value of the probability ratio between two counterparts
+            for the same primary source to be flagged as a secondary match.            
+        """
         prob_ratio_secondary = kwargs.pop('prob_ratio_secondary', 0.5)
         mag_radius = kwargs.pop('mag_radius', 6.0*u.arcsec) 
 
@@ -247,35 +302,7 @@ class XMatch(BaseMatch):
         if use_mags:
             self._priors = self._calc_priors(mag_radius)
             
-        match = self.final_table(self._match_raw, prob_ratio_secondary)
-
-        return match
-
-    def final_table(self, match_raw, prob_ratio_secondary):
-        match = match_raw.copy()
-        match['ncat'] = match['nPos'] #.rename_column('nPos', 'ncat')
-
-        # Add distance between counterparts????
-
-        log.info('Calculating final probabilities...')
-        #match = self._calc_proba_null(match)
-        #match = self._calc_dist_post_null(match)
-
-        match = self._calc_dist_post(match)
-
-        match = self._add_single_sources(match)
-
-        match = self._calc_psingle(match)
-
-        match = self._calc_pi(match)
-        #match = self._calc_pany_pi(match)
-
-        log.info('Flagging and sorting final results...')
-        match = self._add_match_flags(match, prob_ratio_secondary)
-
-        match = self._sort(match)
-
-        match = self._clean_table(match)
+        match = self._final_table(self._match_raw, prob_ratio_secondary)
 
         return match
 
@@ -359,6 +386,34 @@ class XMatch(BaseMatch):
             priors_dict[cat.name] = prior
             
         return priors_dict
+
+    def _final_table(self, match_raw, prob_ratio_secondary):
+        match = match_raw.copy()
+        match['ncat'] = match['nPos'] #.rename_column('nPos', 'ncat')
+
+        # Add distance between counterparts????
+
+        log.info('Calculating final probabilities...')
+        #match = self._calc_proba_null(match)
+        #match = self._calc_dist_post_null(match)
+
+        match = self._calc_dist_post(match)
+
+        match = self._add_single_sources(match)
+
+        match = self._calc_psingle(match)
+
+        match = self._calc_pi(match)
+        #match = self._calc_pany_pi(match)
+
+        log.info('Flagging and sorting final results...')
+        match = self._add_match_flags(match, prob_ratio_secondary)
+
+        match = self._sort(match)
+
+        match = self._clean_table(match)
+
+        return match
 
     def _get_proba_dict(self, match):
         # Build a dictionary with the columns with posterior
@@ -723,7 +778,7 @@ class XMatch(BaseMatch):
         prob_ratio_secondary = kwargs.pop('prob_ratio_secondary', 0.5)
 
         # Hide std ouput of xmatch
-        with redirect_stdout(open(os.devnull, "w")):
+        with redirect_stdout(open(os.devnull, 'w')):
             match_file = 'tmp_match_rnd.fits'
             match_rnd_raw = self._xmatch(xmatchserver_user, match_file, **kwargs)
 
@@ -742,7 +797,7 @@ class XMatch(BaseMatch):
 
 def make_xms_file(catalogues, xms_file, match_file, **kwargs):
     """
-    Prepare an xms file with the data needed for a cross-match.
+    Prepare an X-Match script file (xms) with the data needed for a cross-match.
     """
     completeness = kwargs.pop('completeness', 0.9973)
     method = kwargs.pop('xmatch_method', 'probaN_v1')

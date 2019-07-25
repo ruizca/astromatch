@@ -45,7 +45,35 @@ class NWMatch(BaseMatch):
 
     ### Public Methods
     def run(self, radius=6*u.arcsec, use_mags=False, bayes_prior=True, **kwargs):
-
+        """
+        Perform the cross-matching between the defined catalogues.
+        
+        Parameters
+        ----------
+        radius : ``Quantity``, optional
+            Maximum search radius for counterparts. It must be an angular 
+            ``Quantity``. Defaults to 6 arcsec.
+        use_mags : ``boolean``, optional
+            apply corrections to the association probabilities based on the
+            magnitudes of the counterpart sources. To this end, probability
+            priors are constructed for each magnitude contained in the
+            secondary catalogues.
+        bayes_prior : ``boolean``, optional
+            If ``True``, only associations with high position-based probability 
+            are used to calculate the magnitude probability priors. Otherwise,
+            they are estimated using ``Prior`` objects. See the ``Prior``
+            documentation for details on how these are calculated. Defaults to
+            ``False``.
+        mag_include_radius : ``Quantity``, optional
+            Search radius around sources in the primary catalogue for
+            building the magnitude priors. It must be an angular ``Quantity``.
+            Defaults to 6 arcsec.
+        prob_ratio_secondary : `float`, optional
+            Minimum value of the probability ratio between two counterparts
+            for the same primary source to be flagged as a secondary match.            
+        store_mag_hists : ``boolean``, optional
+            Save the magnitude priors as text files.
+        """
         self.radius = radius
         mag_radius = kwargs.get('mag_include_radius', 6)
         nwaycats_list, priors_dict = self._get_nwaycats(mag_radius, use_mags, 
