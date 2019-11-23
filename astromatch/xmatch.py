@@ -782,7 +782,7 @@ class XMatch(BaseMatch):
             match_file = 'tmp_match_rnd.fits'
             match_rnd_raw = self._xmatch(xmatchserver_user, match_file, **kwargs)
 
-        match_rnd = self.final_table(match_rnd_raw, prob_ratio_secondary)
+        match_rnd = self._final_table(match_rnd_raw, prob_ratio_secondary)
 
         # Recover original pcat
         self.pcat = original_pcat
