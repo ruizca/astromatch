@@ -8,7 +8,6 @@ from __future__ import division
 from __future__ import print_function
 
 import warnings
-#from inspect import signature
 
 from astropy import log
 from astropy import units as u
@@ -237,24 +236,6 @@ class Match(object):
 #    def _flag_best_match(self, cutoff, calibrate_with_random_cat):
 #        self._match.flag_best_match(self._result, cutoff=cutoff)
 
-#    @staticmethod
-#    def _parse_kwargs_lr(kwargs):
-#        sig = signature(LRMatch)
-#        kwargs_init_default = [p for p in sig.parameters]
-#
-#        sig = signature(LRMatch.run)
-#        kwargs_run_default = [p for p in sig.parameters]
-#
-#        kwargs_init, kwargs_run = {}, {}
-#        for key, value in kwargs.items():
-#            if key in kwargs_init_default:
-#                kwargs_init[key] = value
-#                
-#            if key in kwargs_run_default:
-#                kwargs_run[key] = value
-#
-#        return kwargs_init, kwargs_run
-
     @staticmethod
     def _poserrs_to_circle(catalogues):
         """
@@ -262,7 +243,7 @@ class Match(object):
         """
         newcats = []
         for cat in catalogues:
-            if cat.poserr.errtype is not 'circle':
+            if cat.poserr.errtype != 'circle':
                 errs = cat.poserr.transform_to('circle')
                 cat.poserr = errs
                 

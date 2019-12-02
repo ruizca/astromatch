@@ -283,7 +283,7 @@ class XMatch(BaseMatch):
             priors are constructed for each magnitude contained in the
             secondary catalogues. See ``Prior`` documentation for details on
             how these are calculated. Defaults to ``False``.
-        mag_radius : ``Quantity``, optional
+        mag_include_radius : ``Quantity``, optional
             Search radius around sources in the primary catalogue for
             building the magnitude priors. It must be an angular ``Quantity``.
             Defaults to 6 arcsec.
@@ -292,15 +292,15 @@ class XMatch(BaseMatch):
             for the same primary source to be flagged as a secondary match.            
         """
         prob_ratio_secondary = kwargs.pop('prob_ratio_secondary', 0.5)
-        mag_radius = kwargs.pop('mag_radius', 6.0*u.arcsec) 
+        kwargs_prior, kwargs_run = self.parse_args(kwargs)
 
-        self._match_raw = self._xmatch(xmatchserver_user, **kwargs)
+        self._match_raw = self._xmatch(xmatchserver_user, **kwargs_run)
 
 #        match_file = 'tmp_match.fits'
 #        self._match_raw = Table.read(match_file)
 
         if use_mags:
-            self._priors = self._calc_priors(mag_radius)
+            self._priors = self._calc_priors(**kwargs_prior)
             
         match = self._final_table(self._match_raw, prob_ratio_secondary)
 
@@ -379,10 +379,10 @@ class XMatch(BaseMatch):
 
         return files_in_server
 
-    def _calc_priors(self, mag_radius):
+    def _calc_priors(self, **kwargs):
         priors_dict = {}
         for cat in self.scats:
-            prior = Prior(self.pcat, cat, radius=mag_radius)
+            prior = Prior(self.pcat, cat, **kwargs)
             priors_dict[cat.name] = prior
             
         return priors_dict
@@ -782,7 +782,7 @@ class XMatch(BaseMatch):
             match_file = 'tmp_match_rnd.fits'
             match_rnd_raw = self._xmatch(xmatchserver_user, match_file, **kwargs)
 
-        match_rnd = self.final_table(match_rnd_raw, prob_ratio_secondary)
+        match_rnd = self._final_table(match_rnd_raw, prob_ratio_secondary)
 
         # Recover original pcat
         self.pcat = original_pcat

@@ -8,9 +8,14 @@ from __future__ import division
 from __future__ import print_function
 from six.moves import range
 
+from inspect import signature
+
 from astropy import log
+from astropy import units as u
 from astropy.table import Table, join
 import numpy as np
+
+from .priors import Prior
 
 
 class BaseMatch(object):
@@ -135,6 +140,21 @@ class BaseMatch(object):
 #
 #        cutoff_str = '{} > {}'.format(self._cutoff_column, cutoff)
 #        match.meta['best_match_cutoff'] = cutoff_str
+
+    def parse_args(self, kwargs):
+        sig = signature(Prior)
+        kwargs_prior_default = [p for p in sig.parameters]
+
+        kwargs_prior, kwargs_run = {}, {}
+        for key, value in kwargs.items():
+            if key in kwargs_prior_default:
+                kwargs_prior[key] = value
+            else:
+                kwargs_run[key] = value
+
+        kwargs_prior["radius"] = kwargs_run.pop('mag_include_radius', 6*u.arcsec)
+
+        return kwargs_prior, kwargs_run
 
     ### Internal methods
     def _calc_cutoff(self, stats, false_rate=None):
