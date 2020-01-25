@@ -1,5 +1,5 @@
 """
-astromatch module for cross-matching astronomical 
+astromatch module for cross-matching astronomical
 catalogues using the ARCHES XMatch server.
 
 Reference: Pineau et al. 2017
@@ -25,7 +25,6 @@ import tempfile
 import warnings
 from base64 import b64encode
 from shutil import rmtree
-from copy import deepcopy
 
 try:
     # python 3
@@ -41,12 +40,12 @@ except NameError:
     # python 2
     FileNotFoundError = IOError
 
+import numpy as np
 import requests
 from astropy import log
 from astropy import units as u
 from astropy.table import Table, Column, join, unique, vstack
 from nwaylib.magnitudeweights import fitfunc_histogram
-import numpy as np
 
 from .priors import Prior
 from .match import BaseMatch
@@ -62,7 +61,7 @@ class XMatchServerError(Exception):
 
 class XMatchServer(object):
     """
-    Class for accessing the ARCHES X-Match tool   
+    Class for accessing the ARCHES X-Match tool
 
     * The anonymous session last 30 minutes after the last operation: after
     this delay, the content of the remote directory is removed.
@@ -75,7 +74,7 @@ class XMatchServer(object):
     """
     _host = 'http://serendib.unistra.fr'
     url = os.path.join(_host, 'ARCHESWebService/XMatchARCHES')
-    
+
     def __init__(self, user=None):
         """
         Start a session in the ARCHES X-Match tool.
@@ -84,7 +83,7 @@ class XMatchServer(object):
             user = 'anonymous'
 
         self.session = self._start_session(user)
-    
+
     def _start_session(self, user):
         if user != 'anonymous':
             try:
@@ -100,11 +99,11 @@ class XMatchServer(object):
         session = requests.Session()
         response = session.post(self.url, data=data)
         self._check_status(response)
-                
+
         if user != 'anonymous':
             _passwd_dict_xms[user] = passwd
 
-        return session     
+        return session
 
     def _encode_passwd(self, passwd):
         m = hashlib.sha1(passwd.encode())
@@ -112,12 +111,12 @@ class XMatchServer(object):
 
         return b64encode(hexpasswd.encode())
 
-        
+
     def logout(self):
         """
         logout from X-Match server.
         """
-        response = self.session.get(self.url, params=(('cmd', 'quit'),))        
+        response = self.session.get(self.url, params=(('cmd', 'quit'),))
         self._check_status(response)
 
     def logged(self):
@@ -152,7 +151,7 @@ class XMatchServer(object):
     def put(self, *args):
         """
         Upload files into the X-Match server.
-        
+
         Parameters
         ----------
         args : path of the files to be uploaded.
@@ -175,7 +174,7 @@ class XMatchServer(object):
     def get(self, *args, **kwargs):
         """
         Download files from the X-Match server.
-        
+
         Parameters
         ----------
         args : files to be downloaded.
@@ -202,7 +201,7 @@ class XMatchServer(object):
     def remove(self, *args):
         """
         Delete files in the X-Match server.
-        
+
         Parameters
         ----------
         args : path of the files to be deleted.
@@ -266,12 +265,12 @@ class XMatch(BaseMatch):
             raise AttributeError('Match has not been performed yet!')
         else:
             return self._match_raw
-            
+
     ### Public Methods
     def run(self, use_mags=False, xmatchserver_user=None, **kwargs):
         """
         Perform the cross-matching between the defined catalogues.
-        
+
         Parameters
         ----------
         xmatchserver_user : ``str`` or ``None``
@@ -289,52 +288,52 @@ class XMatch(BaseMatch):
             Defaults to 6 arcsec.
         prob_ratio_secondary : `float`, optional
             Minimum value of the probability ratio between two counterparts
-            for the same primary source to be flagged as a secondary match.            
+            for the same primary source to be flagged as a secondary match.
         """
         prob_ratio_secondary = kwargs.pop('prob_ratio_secondary', 0.5)
         kwargs_prior, kwargs_run = self.parse_args(kwargs)
 
         self._match_raw = self._xmatch(xmatchserver_user, **kwargs_run)
 
-#        match_file = 'tmp_match.fits'
-#        self._match_raw = Table.read(match_file)
+        # match_file = 'tmp_match.fits'
+        # self._match_raw = Table.read(match_file)
 
         if use_mags:
             self._priors = self._calc_priors(**kwargs_prior)
-            
-        match = self._final_table(self._match_raw, prob_ratio_secondary)
 
-        return match
+        return self._final_table(self._match_raw, prob_ratio_secondary)
 
-    def stats_rndmatch(self, match, match_rnd, ncutoff=101, plot_to_file=None):
-        """
-        Calculates match statistics (completness and reliability), using a
-        random match, for a range of thresholds. This can be used later to 
-        select the optimal threshold.
-        """
-        mask = match['match_flag'] == 1
-        p_any0 = match[self._cutoff_column][mask]
+    # def stats_rndmatch(self, match, match_rnd, ncutoff=101, plot_to_file=None):
+    #     """
+    #     Calculates match statistics (completness and reliability), using a
+    #     random match, for a range of thresholds. This can be used later to
+    #     select the optimal threshold.
+    #     """
+    #     mask = match['match_flag'] == 1
+    #     p_any0 = match[self._cutoff_column][mask]
 
-        mask = match_rnd['match_flag'] == 1
-        p_any0_offset = match_rnd[self._cutoff_column][mask]
+    #     mask = match_rnd['match_flag'] == 1
+    #     p_any0_offset = match_rnd[self._cutoff_column][mask]
 
-        cutoffs = np.linspace(0, 1, num=ncutoff)
+    #     cutoffs = np.linspace(0, 1, num=ncutoff)
 
-        stats = Table()
-        stats['cutoff'] = cutoffs
-        stats['completeness'] = [(p_any0 > c).mean() for c in cutoffs]
-        stats['error_rate'] = [(p_any0_offset > c).mean() for c in cutoffs]
-        stats['reliability'] = 1 - stats['error_rate']
-        stats['CR'] = stats['completeness'] + stats['reliability']
+    #     stats = Table()
+    #     stats['cutoff'] = cutoffs
+    #     stats['completeness'] = [(p_any0 > c).mean() for c in cutoffs]
+    #     stats['error_rate'] = [(p_any0_offset > c).mean() for c in cutoffs]
+    #     stats['reliability'] = 1 - stats['error_rate']
+    #     stats['CR'] = stats['completeness'] + stats['reliability']
 
-        if plot_to_file is not None:
-            self._plot_stats(stats, plot_to_file)
+    #     if plot_to_file is not None:
+    #         self._plot_stats(stats, plot_to_file)
 
-        return stats
+    #     return stats
 
 
     ### Internal Methods
-    def _xmatch(self, xmatchserver_user, match_file='tmp_match.fits', **kwargs):
+    def _xmatch(
+        self, xmatchserver_user, match_file='tmp_match.fits', **kwargs
+    ):
         # Use the XMatch server for the cross-matching
         xms = XMatchServer(user=xmatchserver_user)
 
@@ -355,6 +354,7 @@ class XMatch(BaseMatch):
             xms.logout()
 
             match = Table.read(match_file)
+            match.meta = {}
             os.remove(match_file)
 
             return match
@@ -380,18 +380,29 @@ class XMatch(BaseMatch):
         return files_in_server
 
     def _calc_priors(self, **kwargs):
-        priors_dict = {}
-        for cat in self.scats:
-            prior = Prior(self.pcat, cat, **kwargs)
-            priors_dict[cat.name] = prior
-            
+        priors = kwargs.pop('priors', None)
+
+        if not priors:
+            log.info('Calculating priors...')
+
+            priors_dict = {}
+            for cat in self.scats:
+                prior = Prior(self.pcat, cat, **kwargs)
+                priors_dict[cat.name] = prior
+
+        else:
+            log.info('Using user-supplied priors...')
+            priors_dict = priors
+
         return priors_dict
 
     def _final_table(self, match_raw, prob_ratio_secondary):
         match = match_raw.copy()
         match['ncat'] = match['nPos'] #.rename_column('nPos', 'ncat')
 
-        # Add distance between counterparts????
+        match = self._strip_ids(match)
+
+        # TODO: Add distance between counterparts????
 
         log.info('Calculating final probabilities...')
         #match = self._calc_proba_null(match)
@@ -412,6 +423,15 @@ class XMatch(BaseMatch):
         match = self._sort(match)
 
         match = self._clean_table(match)
+
+        return match
+
+    def _strip_ids(self, match):
+        # For some reason the raw xmatch output have id labels
+        # trimmed with whitespaces, so we need to remove them.
+        for col in match.colnames:
+            if col.startswith('SRCID_'):
+                match[col] = np.char.strip(match[col])
 
         return match
 
@@ -529,9 +549,9 @@ class XMatch(BaseMatch):
                     group_table.sort(['dist_post'])
                     group_table.reverse()
                     group_table = unique(group_table, keys=n_dict[key + '_idcols'])
-                    
-                    split_tables_list.append(group_table)            
-       
+
+                    split_tables_list.append(group_table)
+
         match = vstack([match] + split_tables_list)
 
         return match
@@ -561,13 +581,13 @@ class XMatch(BaseMatch):
 
         else:
             match['p_single'] = match['dist_post']
-            
+
         return match
 
 #    def _calc_match_prior0(self, match):
 #        # Prior of the null hypothesis (no real association)
 #        # is the overall identification ratio:
-#        # number of matches divided by the total number 
+#        # number of matches divided by the total number
 #        # of sources in the primary catalogue.
 #        # NWAY uses the completeness estimation provided by the user.
 #
@@ -577,21 +597,21 @@ class XMatch(BaseMatch):
 #        nmatches = len(unique(match[mask], keys=idkey))
 #
 #        # TODO: may be this could be corrected taking into account
-#        # the completeness value given to xmatch 
+#        # the completeness value given to xmatch
 #        # (not related with the nway completeness)
-#        
+#
 #        return 1.0 * nmatches / len(self.pcat)
 #
 #    def _calc_match_priors(self, match):
 #        nscats = len(self.scats)
 #        area_total = (4*np.pi * u.rad**2).to(u.deg**2) #( (4 * pi * (180 / pi)**2)
 #        prior0 = self._calc_match_prior0(match)
-#        
+#
 #        match_priors = {}
 #        for n in range(nscats):
 #            for c in combinations(self.scats, n+1):
 #                prior_name = self.pcat.name[0] + ''.join(cat.name[0] for cat in c)
-#                match_priors[prior_name] = 1.0                
+#                match_priors[prior_name] = 1.0
 #
 #                for cat in c:
 #                    completeness = prior0**(1.0/nscats)
@@ -600,32 +620,34 @@ class XMatch(BaseMatch):
 #
 #        return match_priors, prior0
 
-    def _add_magbias(self, match):        
+    def _add_magbias(self, match):
         total_bias = np.zeros(len(match))
         match['SIDX'] = np.arange(len(match))
 
         for cat in self.scats:
             match_idcol = 'SRCID_{}'.format(cat.name)
-            prior = self._priors[cat.name].prior_dict
+            prior = self._priors[cat.name].to_nway_hists()
 
             match_withcat = unique(match, keys=match_idcol)
             match_withcat = [row[match_idcol] for row in match_withcat
                              if not row[match_idcol].isspace()]
+
             cat_withmatch = cat.select_by_id(match_withcat)
 
-            for magcol in cat.mags.colnames:
+            for i, magcol in enumerate(cat.mags.colnames):
                 # using nway implementation for this
-                hist = prior[magcol]
-                func = fitfunc_histogram(hist['bins'], hist['good'], hist['field'])
+                hist = prior[i]
+                bins = np.concatenate((hist[0], [hist[1][-1]]))
+                func = fitfunc_histogram(bins, hist[2], hist[3])
 
                 weights = np.log10(func(cat_withmatch.mags[magcol]))
                 weights[np.isnan(weights)] = 0 # undefined magnitudes do not contribute
-                
+
                 magbias = Table()
                 magbias[match_idcol] = cat_withmatch.ids
                 magbias_col = 'log_bias_{}'.format(magcol)
                 magbias[magbias_col] = weights
-                
+
                 match = join(match, magbias, keys=match_idcol, join_type='left')
                 match[magbias_col][match[magbias_col].mask] = 0.0
                 match.sort('SIDX')
@@ -642,7 +664,7 @@ class XMatch(BaseMatch):
         match['p_single'][mask] = 0.0
 
         match.remove_column('SIDX')
-        
+
         return match
 
     def _calc_pi(self, match):
@@ -746,7 +768,7 @@ class XMatch(BaseMatch):
     def _clean_table(self, match):
         # Move chi2Pos column
         match.rename_column('chi2Pos', 'chi2Pos_old')
-        
+
         idx_flag = match.colnames.index('ncat')
         col_flag = Column(name='chi2Pos', data=match['chi2Pos_old'].data)
         match.add_column(col_flag, index=idx_flag)
@@ -769,24 +791,23 @@ class XMatch(BaseMatch):
         return match[~mask]
 
     def _match_rndcat(self, xmatchserver_user=None, **kwargs):
-        # Cross-match secondary catalogue with a randomized 
+        # Cross-match secondary catalogue with a randomized
         # version of the primary catalogue
-        original_pcat = deepcopy(self.pcat)
-        self.pcat = self.pcat.randomise(numrepeat=1)
-        self.catalogues[0] = self.pcat
+        xm_rnd = XMatch(
+            self.pcat.randomise(numrepeat=1),
+            *self.scats
+        )
 
-        prob_ratio_secondary = kwargs.pop('prob_ratio_secondary', 0.5)
+        if self._priors:
+            use_mags = True
+        else:
+            use_mags = False
 
         # Hide std ouput of xmatch
         with redirect_stdout(open(os.devnull, 'w')):
-            match_file = 'tmp_match_rnd.fits'
-            match_rnd_raw = self._xmatch(xmatchserver_user, match_file, **kwargs)
-
-        match_rnd = self._final_table(match_rnd_raw, prob_ratio_secondary)
-
-        # Recover original pcat
-        self.pcat = original_pcat
-        self.catalogues[0] = original_pcat
+            match_rnd = xm_rnd.run(
+                use_mags, xmatchserver_user, priors=self._priors, **kwargs
+            )
 
         return match_rnd
 
@@ -803,7 +824,7 @@ def make_xms_file(catalogues, xms_file, match_file, **kwargs):
     method = kwargs.pop('xmatch_method', 'probaN_v1')
 
     # We assume all catalogues cover the same sky area
-    area = catalogues[0].area.to(u.rad**2).value 
+    area = catalogues[0].area.to(u.rad**2).value
     joins = 'M'
 
     mainId = 'SRCID_{}'.format(catalogues[0].name)
@@ -811,7 +832,7 @@ def make_xms_file(catalogues, xms_file, match_file, **kwargs):
     proba_letters = ','.join('{}'.format(cat.name[0]) for cat in catalogues)
 
     xms_cmd = 'gset proba_letters={}\n'.format(proba_letters)
-    for i, cat in enumerate(catalogues):    
+    for i, cat in enumerate(catalogues):
         xms_cat = _xms_cat_properties(cat)
         xms_cmd = ''.join([xms_cmd, xms_cat])
 

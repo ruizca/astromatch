@@ -22,7 +22,7 @@ AUTHOR = metadata.get('author', 'A. Ruiz')
 AUTHOR_EMAIL = metadata.get('author_email', 'angel.ruizca@gmail.com')
 LICENSE = metadata.get('license', 'unknown')
 URL = metadata.get('url', 'http://astropy.org')
-__minimum_python_version__ = metadata.get("minimum_python_version", "2.7")
+__minimum_python_version__ = metadata.get("minimum_python_version", "3.6")
 
 # Enforce Python version check - this is the same check as in __init__.py but
 # this one has to happen before importing ah_bootstrap.

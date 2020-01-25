@@ -8,14 +8,14 @@ Statistical crossmatching of astronomical catalogues
 NOTE: THIS IS A PRELIMINARY DEVELOPMENT VERSION,
 FAR FROM BEING FULLY TESTED AND DOCUMENTED.
 
-``astromatch`` is a Python 2/3 package for statistical cross-matching of
+``astromatch`` is a Python 3 package for statistical cross-matching of
 astronomical catalogues. We offer three different methods: 'lr', our own
 implementation of the likelihood ratio method; 'xmatch', which uses an external
 server hosted by the CDS; and 'nway', using the NWAY package.
 
 ``astromatch`` gives a consistent output for different cross-matching methods,
 enabling an easier comparison of their results. It also offers a useful
-framework, well integrated within the Astropy's ecosystem, for including new
+framework, well integrated within the Astropy framework, for including new
 methods.
 
 Dependencies
@@ -30,6 +30,7 @@ Certain functionalities also requiere:
 
 * ``nway``
 * ``matplotlib``
+* ``request``
 
 Installation
 ------------
@@ -38,8 +39,16 @@ Installation
 
     pip install astromatch
 
-Example
--------
+Alternatively, clone the repository and use pip to install the downloaded code::
+
+    git clone https://github.com/ruizca/astromatch.git
+    pip install ./astromatch
+
+Examples
+--------
+
+You can find a Jupyter notebook explaining how to use astromatch in
+``docs/astropy/examples.ipynb``.
 
 License
 -------
