@@ -45,8 +45,8 @@ class Match(object):
                     raise ValueError(
                         'Some parameters were not defined for catalogue {}!'.format(i)
                     )
-
-                cat = Catalogue(cat_data, **cat_params)
+                area = cat_params.pop("area")
+                cat = Catalogue(cat_data, area, **cat_params)
 
             catalogues.append(cat)
 

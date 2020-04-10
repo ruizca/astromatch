@@ -511,7 +511,7 @@ def _define_magbins(magmin, magmax, magbinsize):
     if magbinsize == 'auto':
         bins = 'auto'
     else:
-        nbins = 1 + (magmax - magmin)/magbinsize
+        nbins = 1 + int((magmax - magmin)/magbinsize)
         bins = np.linspace(magmin, magmax, num=nbins)
 
     limits = (magmin, magmax)
