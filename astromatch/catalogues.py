@@ -903,7 +903,12 @@ class Catalogue(object):
 
     def _self_apply_moc(self):
         if self.moc is not None:
-            self = self.apply_moc(self.moc)
+            cat_inmoc = self.apply_moc(self.moc)
+
+            self.ids = cat_inmoc.ids
+            self.coords = cat_inmoc.coords
+            self.mags = cat_inmoc.mags
+            self.poserr = cat_inmoc.poserr
 
     def _random_coords(self, a_min, a_max, r_min, r_max, numrepeat, seed):
         # a_min, a_max, r_min, r_max: Quantity type
