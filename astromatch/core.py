@@ -23,18 +23,7 @@ class Match(object):
     Main class for crossmatching catalogues.
     """
     def __init__(self, *args, **kwargs):
-        self.catalogues = self._parse_catalogues(*args, **kwargs)
-
-        # Crossmatch only for sources cointained in the intersection of mocs, if no
-        # mocs were defined, we assume that all catalogues cover the same sky region.
-        self.catalogues = self._select_sources_in_moc()
-
-        self._match = None
-        self._result = None
-        self._priors = None
-
-    def _parse_catalogues(self, *args, **kwargs):
-        catalogues = []
+        self.catalogues = []
         for i, cat_data in enumerate(args):
             if isinstance(cat_data, Catalogue):
                 cat = cat_data
@@ -42,37 +31,16 @@ class Match(object):
                 try:
                     cat_params = {kw: kwargs[kw][i] for kw in kwargs}
                 except IndexError:
-                    raise ValueError(
-                        'Some parameters were not defined for catalogue {}!'.format(i)
-                    )
-                area = cat_params.pop("area")
-                cat = Catalogue(cat_data, area, **cat_params)
+                    message = 'Some parameters were not defined for catalogue {}!'
+                    raise ValueError(message.format(i))
 
-            catalogues.append(cat)
+                cat = Catalogue(cat_data, **cat_params)
 
-        return catalogues
-        
-    def _select_sources_in_moc(self):
-        total_moc = self.total_moc()
+            self.catalogues.append(cat)
 
-        if total_moc is not None:
-            log.info("Selecting sources in common area...")
-
-            catalogues_inmoc = []
-            for cat in self.catalogues:
-                cat_inmoc = cat.apply_moc(total_moc)
-                catalogues_inmoc.append(cat_inmoc)
-
-                message = "{} catalogue: {} sources in common area."
-                log.info(message.format(cat_inmoc.name, len(cat_inmoc)))
-        else:
-            log.warning(
-                "No MOCs were defined. Astromatch will assume "
-                "that all catalogues cover the same sky region."
-            )
-            catalogues_inmoc = self.catalogues
-
-        return catalogues_inmoc
+        self._match = None
+        self._result = None
+        self._priors = None
 
 
     @property
@@ -88,6 +56,13 @@ class Match(object):
             raise AttributeError('Match has not been performed yet!')
         else:
             return self._match.priors
+
+    @property
+    def priorsND(self):
+        if self._match is None:
+            raise AttributeError('Match has not been performed yet!')
+        else:
+            return self._match.priorsND
 
     @property
     def lr(self):
@@ -128,6 +103,17 @@ class Match(object):
         **kwargs : specific parameters for the selected cross-matching method.
             See the method documentation for more information.
         """
+        total_moc = self.total_moc()
+
+        # Crossmatch only for sources cointained in the intersection of mocs,
+        # if no mocs were defined, we assume that all catalogues cover the same sky area
+        if total_moc is not None:
+            catalogues_inmoc = []
+            for cat in self.catalogues:
+                catalogues_inmoc.append(cat.apply_moc(total_moc))
+
+            self.catalogues = catalogues_inmoc
+
         # Run the crossmatch with the defined method
         method_name = '_{}__{}'.format(self.__class__.__name__, method)
         match_method = getattr(self, method_name)
@@ -199,26 +185,15 @@ class Match(object):
 
         return matchs
 
-    def offset(self, pcat_name, scat_name, match_type='primary'):
-        """
-        Returns the RA and Dec offsets between the matches of two catalogues.
-
-        Parameters
-        ----------
-        pcat_name, scat_name : `str`
-            Names of the Catalogues for calculating the offsets.
-        match_type : `str`, optional
-            Type of matches for calculating the offsets. See ``get_matchs`` method.
-            The default is 'primary'.
-
-        Returns
-        -------
-        dra, ddec : ndarrays
-            numpy arrays with RA and Dec offset between matches. Units in arcsec.
-        """
+    def offset(self, pcat_name, scat_name, only_best=False):
         cat_names = self._catalogue_names()
         if not (set([pcat_name, scat_name]) <= set(cat_names)):
             raise ValueError('Unknown catalogue name.')
+
+        if only_best:
+            match_type = 'best'
+        else:
+            match_type = 'all'
 
         matchs = self.get_matchs(match_type=match_type)
 
@@ -237,33 +212,19 @@ class Match(object):
     def set_best_matchs(
         self, cutoff=None, false_rate=None, calibrate_with_random_cat=False, **kwargs,
     ):
-        """
-        Identify matches above a certain cutoff. If no cutoff is provided,
-        astromatch calculates an optimum value, trying to maximize the completeness
-        while minimizing the false identification rate.
 
-        Parameters
-        ----------
-        cutoff : TYPE, optional
-            DESCRIPTION. The default is None.
-        false_rate : TYPE, optional
-            DESCRIPTION. The default is None.
-        calibrate_with_random_cat : TYPE, optional
-            DESCRIPTION. The default is False.
-
-        Other Parameters
-        ----------------
-        **kwargs : Cross-matching parameters when calibrating with a random match.
-        """
         if self._result is None:
             raise AttributeError('Match has not been performed yet!')
 
+        match_rnd = None
         if cutoff is None:
-            cutoff = self._calibrate_best_match(
+            cutoff, match_rnd  = self._calibrate_best_match(
                 false_rate, calibrate_with_random_cat, **kwargs
             )
 
         self._match.flag_best_match(self._result, cutoff=cutoff)
+
+        return match_rnd
 
     def stats(self, match_rnd=False, use_broos=False, **kwargs):
         """
@@ -279,16 +240,18 @@ class Match(object):
         Monte Carlo 2: follows the method described in Broos et al. 2006, where
         MC simulations are used to characterize the properties of the isolated and
         the associated populations of the primary catalogue.
-
-        Other Parameters
-        ----------------
-        **kwargs : matching parameters when using MC methods.
         """
         if use_broos:
             stats = self._match.stats_broos(self.results, **kwargs)
+
         else:
-            if match_rnd:
-                stats = self._match.stats_rndmatch(self.results, **kwargs)
+            if match_rnd is True:
+                match_rnd = self._match._match_rndcat(**kwargs)
+                stats = self._match.stats_rndmatch(self.results, match_rnd, **kwargs)
+
+            elif isinstance(match_rnd, Catalogue):
+                stats = self._match.stats_rndmatch(self.results, match_rnd, **kwargs)
+
             else:
                 stats = self._match.stats(self.results, **kwargs)
 
@@ -341,13 +304,15 @@ class Match(object):
 
         if calibrate_with_random_cat:
             log.info('Calibrating probability cutoff using a random match...')
-            stats = self.stats(match_rnd=True)
+            match_rnd = self._match._match_rndcat(**kwargs)
+            stats = self._match.stats_rndmatch(self._result, match_rnd)
         else:
-            stats = self.stats()
+            match_rnd = None
+            stats = self._match.stats(self._result)
 
         cutoff = self._match._calc_cutoff(stats, false_rate)
 
-        return cutoff
+        return cutoff, match_rnd
 
     @staticmethod
     def _poserrs_to_circle(catalogues):
