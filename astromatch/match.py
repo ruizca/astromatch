@@ -10,10 +10,10 @@ from six.moves import range
 
 from inspect import signature
 
-import numpy as np
 from astropy import log
 from astropy import units as u
 from astropy.table import Table, join
+import numpy as np
 
 from . import broos
 from .priors import Prior
@@ -55,7 +55,7 @@ class BaseMatch(object):
         plot_to_file=None
     ):
         """
-        Calculates match statistics (completness and reliability)
+        Calculates and store match statistics (completness and reliability)
         for a range of thresholds. This can be used later to select the
         optimal threshold.
         """
@@ -91,7 +91,7 @@ class BaseMatch(object):
     def stats_rndmatch(
         self,
         match,
-        ntest=1,
+        match_rnd,
         ncutoff=101,
         mincutoff=0.0,
         maxcutoff=1.0,
@@ -103,39 +103,25 @@ class BaseMatch(object):
         random match, for a range of thresholds. This can be used later to
         select the optimal threshold.
         """
-        # TODO: estimate uncertainties in the final statistics using e.g. bootstraping
-        fstats = None
-        for _ in range(ntest):
-            match_rnd = self._match_rndcat(**kwargs)
-    
-            mask = match['match_flag'] == 1
-            p_any0 = match[self._cutoff_column][mask]
-    
-            mask = match_rnd['match_flag'] == 1
-            p_any0_offset = match_rnd[self._cutoff_column][mask]
-    
-            cutoffs = np.linspace(mincutoff, maxcutoff, num=ncutoff)
-    
-            stats = Table()
-            stats['cutoff'] = cutoffs
-            stats['completeness'] = [(p_any0 > c).mean() for c in cutoffs]
-            stats['error_rate'] = [(p_any0_offset > c).mean() for c in cutoffs]
-            stats['reliability'] = 1 - stats['error_rate']
-            stats['CR'] = stats['completeness'] + stats['reliability']
+        mask = match['ncat'] == 1
+        p_any0 = match['prob_has_match'][mask]
 
-            if fstats is None:
-                fstats = stats.copy()
-            else:
-                for col in fstats.colnames[1:]:
-                    fstats[col] += stats[col]
+        mask = match_rnd['ncat'] == 1
+        p_any0_offset = match_rnd['prob_has_match'][mask]
 
-        for col in fstats.colnames[1:]:
-            fstats[col] = fstats[col] / ntest
+        cutoffs = np.linspace(mincutoff, maxcutoff, num=ncutoff)
+
+        stats = Table()
+        stats['cutoff'] = cutoffs
+        stats['completeness'] = [(p_any0 > c).mean() for c in cutoffs]
+        stats['error_rate'] = [(p_any0_offset > c).mean() for c in cutoffs]
+        stats['reliability'] = 1 - stats['error_rate']
+        stats['CR'] = stats['completeness'] + stats['reliability']
 
         if plot_to_file is not None:
-            self._plot_stats(fstats, plot_to_file)
+            self._plot_stats(stats, plot_to_file)
 
-        return fstats
+        return stats
 
     def stats_broos(
         self,
@@ -148,7 +134,7 @@ class BaseMatch(object):
         **kwargs
     ):
         """
-        Calculates match statistics (completness and reliability)
+        Calculates and store match statistics (completness and reliability)
         for a range of thresholds. We use here the Monte Carlo method
         presented in Broos et al. 2006, where isolated and associated populations
         of the primary catalogue are treated independently.
