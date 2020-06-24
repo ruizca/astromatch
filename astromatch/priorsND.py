@@ -39,16 +39,87 @@ class PriorND(object):
         prior_dict=None
     ):
         """
-        Estimates the prior probability distribution for a source in the
-        primary catalogue `pcat` having a counterpart in the secondary 
-        catalogue `scat` with magnitude m. 
+        class to Store/Estimate the N-dimensional prior probability 
+        distribution for a source in the primary catalogue `pcat` 
+        having a counterpart in the secondary catalogue `scat` with 
+        observed parameters in a user defined N-dimensional parameter
+        space, e.g. magnitude, colour, optical morphology etc. 
+                
+        The calculation of the prior probability can use the input data.
+        All possible counterparts from the secondary catalogue (scat) 
+        within a given search radius off the  pcat (primary catalogue) 
+        source positions are extracted. These are referred to as the
+        "good" catalogue. A "background" of "field" expectation is
+        estimated by repeating this excersise at random positions
+        within the FOV (defined by the input MOCs) of the
+        observation. The difference between "good" and "field"
+        provides an estimate of the properties of the true counteparts
+        of the pcat sources within the scat catalogue. In practice the
+        user defines properties of interest via the "mags"
+        parameter. These can be magnitudes in a given filter, colours
+        between two bands, optical morphology (point like vs
+        extended) or any other parameter listed in the secondary
+        catalogue. It is emphasised that properties of interest are
+        not created (e.g. the code does produce colours between
+        filters) but should exist as columns in the secondary
+        catalogue table. Combination of properties as also possible to
+        define multi-dimensional spaces. The "mags" attribute should be 
+        a python list. Properties of combination of properties of interest are
+        also python lists within the "mags" list:
+
+        mags=[ [R, GR], [Z] ]
+
+        the above notation defines two priors, the first is a
+        2-dimensional one that inlcudes the scat columns "R" (for
+        example R-band magnitude) and "GR" (could be G-R colour
+        between the G and R optical bands). The second prior is a
+        1-Dimensional prior of the "Z" column (could be Z-band
+        magniude). This notation could be extend to more than
+        2-dimensions (e.g. [ [R, GR, RZ], [Z] ] ).
+
+        The code then uses the columns listed in the mags to build N-D
+        histograms within user defined bins and ranges. This requires
+        defining the range of a given parameter and the size of the
+        bin within which the histograms will be calculated. These are
+        defined via the parameters "magmin", "magmax",
+        "magbinsize". These are expected to be python lists that
+        contain for each input scat column (or combination of scat
+        columsn) in "mags" the corresponding bin size as well as the 
+        minimum and maximum of the range within which the data will be
+        binned. Values of the column outside this range will be
+        ignored. The expected form of these parameters that are
+        consistent with the above "mags" example:
+
+         magmin =     [ [10, -3], [8] ]
+         magmax =     [ [27,  3], [24] ]
+         magbinsize = [ [0.5,  0.1], [0.25] ]
+    
+        The code estimates N-dimensional histograms for both the
+        "good" and "background" or "field" populations. It then
+        substracts the two to determine the N-dimensional distribution
+        of the true counterparts. Negative histograms bins are set to
+        zero. Smoothing is also applied to resutling difference
+        distribution. The current hard-coded smoothing uses an
+        N-dimensional Guassian  distribution with sigma equal to 
+        one bin-size. 
+
+        The result of this process is a prior probability distribution
+        density function for the counterparts of the sources in the primary
+        catalogue.  There will be one prior distribution for each
+        entry in "mags". It is emphasized that the priors are
+        probability distribution density functions, i.e. the values
+        are divided by the bin size (or bin volume in the case of
+        n-dimensional histograms and their integral sums to unity. 
+
+        The class includes methods to save the resulting priors into a
+        fits file. 
         
-        The a priori probability is determined as follows. First, we estimate
-        the magnitude distribution of the spurious matches and it is scaled
-        to the area within which we search for counterparts. This is then 
-        subtracted from the magnitude distribution of all counterparts in the
-        secondary catalogue to determine the magnitude distribution of the 
-        true associations.
+        Priors can also be provided externally via fits file that
+        follow the format conventions of the code. In this case the
+        calculation described above is skipped and the prior
+        probability density functions, "mags", "magmin", "magmax",
+        "magbinsize" are determined from the input file. 
+
 
         Parameters
         ----------
@@ -69,15 +140,21 @@ class PriorND(object):
         radius : Astropy ``Quantity``, optional
             Distance limit used for searching counterparts in the secondary 
             catalogue in angular units. Default to 5 arcsec.
-        magmin : `float` or 'auto', optional
-            Lower magnitude limit when estimating magnitude distributions.
-            Default to 'auto'.
-        magmax : `float` or 'auto', optional
-            Upper magnitude limit when estimating magnitude distributions.
-            Default to 'auto'.
-        magbinsize : `float` or 'auto', optional
-            Magnitude bin width when estimating magnitude distributions.
-            Default to 'auto'.
+        mags : python list that includes lists of strings, optional
+            Columns or combinations of columns in the scat for which
+            histograms will be build. Defaults to None. If None then
+            all the columns listed in the scat.mags Catalogue
+            extension are used o define independent 1-Dimensional priors         
+        magmin : python list that includes lists of `floats` or 'auto', optional
+            Lower boundary of the histograms. Defaults to None. If
+            None or "auto" then the minimum is determined from the data. 
+        magmax : python list that includes lists of `floats` or 'auto', optional
+            Upper boundary of the histograms. Defaults to None.  If
+            None or "auto" then the maximum is determined from the data. 
+        magbinsize :  python list that includes lists of `floats` or 'auto', optional
+            Bin width of the histograms. Defaults to None.  If
+            None or "auto" then it defauls to 0.5. 
+
         """
 
         if prior_dict is None:
@@ -143,9 +220,6 @@ class PriorND(object):
         Parameters
         ----------
         """
-        #print("PRIOR:",self.prior_dict)
-        #print("PRIOR:",col)
-
         if col not in self.prior_dict:
             raise ValueError('Unknown col: {}'.format(col))
 
@@ -163,13 +237,7 @@ class PriorND(object):
             flags[m]=False
             m = indeces>len(edges[i])-2
             indeces[m]=len(edges[i])-2
-            #print(edges)
-            #print(indeces[m])
             flags[m]=False
-            #print("V: ",mags[magcol])
-            #print(edges[i][0], edges[i][1] - edges[i][0])
-            #print("I: ", indeces)
-            #print('E: ',edges[i][indeces])
             q.append(indeces)
         q=tuple(q)
         pvals = prior['good'][q]
@@ -429,7 +497,7 @@ class PriorND(object):
                     field_sample[:,i] = field_cat.mags[c]                    
                     edges.append(np.arange(mn, mx+mb/2.0, mb))
                     
-                prior_dict['prior{}'.format(iprior)] = self._mag_hist(len(pcat), sample, field_sample, renorm_factor, edges, col)
+                prior_dict['PRIOR{}'.format(iprior)] = self._mag_hist(len(pcat), sample, field_sample, renorm_factor, edges, col)
             else:
                 if( (mmin is "auto")):
                     mmin = int(min(field_cat.mags[col])-0.5)
@@ -576,20 +644,27 @@ class BKGpdf(object):
     def __init__(self, cat=None, mags=None, magmin=None, magmax=None, magbinsize=None, pdf_dict=None):
         """
         Magnitude probability distribution of sources in ``Catalogue`` 'cat'.
-        
+        This class store/estimate the N-dimensional binned number density 
+        distribution of sources.
+
         Parameters
         ----------
         cat : ``Catalogue``
             ``Catalogue`` object.
-        magmin : `float` or 'auto', optional
-            Lower magnitude limit when estimating magnitude distributions.
-            Default to 'auto'.
-        magmax : `float` or 'auto', optional
-            Upper magnitude limit when estimating magnitude distributions.
-            Default to 'auto'.
-        magbinsize : `float` or 'auto', optional
-            Magnitude bin width when estimating magnitude distributions.
-            Default to 'auto'.
+        mags : python list that includes lists of strings, optional
+            Columns or combinations of columns in the scat for which
+            histograms will be build. Defaults to None. If None then
+            all the columns listed in the scat.mags Catalogue
+            extension are used o define independent 1-Dimensional priors         
+        magmin : python list that includes lists of `floats` or 'auto', optional
+            Lower boundary of the histograms. Defaults to None. If
+            None or "auto" then the minimum is determined from the data. 
+        magmax : python list that includes lists of `floats` or 'auto', optional
+            Upper boundary of the histograms. Defaults to None.  If
+            None or "auto" then the maximum is determined from the data. 
+        magbinsize :  python list that includes lists of `floats` or 'auto', optional
+            Bin width of the histograms. Defaults to None.  If
+            None or "auto" then it defauls to 0.5. 
 
         Return
         ------
@@ -675,8 +750,7 @@ class BKGpdf(object):
         Parameters
         ----------
         """
-        #print("BKG:",self.pdf_dict)
-        #print("BKG:",col)
+
         if col not in self.pdf_dict:
             raise ValueError('Unknown col: {}'.format(col))
 
@@ -695,10 +769,6 @@ class BKGpdf(object):
             m = indeces>len(edges[i])-2
             indeces[m]=len(edges[i])-2
             flags[m]=False
-            #print("V: ",mags[magcol])
-            #print(edges[i][0], edges[i][1] - edges[i][0])
-            #print("I: ", indeces)
-            #print('E: ',edges[i][indeces])
             q.append(indeces)
         q=tuple(q)
         pvals = prior['pdf'][q]
@@ -862,11 +932,10 @@ class BKGpdf(object):
 
         field = cat.mags
         area = cat.area.to(u.arcsec**2)
-        #print(field)
-        #print(mags, magmin, magmax, magbinsize)
+
         prior_dict = {}  
         for iprior, col, mmin, mmax, mbin in zip(count(), mags, magmin, magmax, magbinsize):
-            #print(iprior, col, mmin, mmax, mbin)
+
             edges=[]
             if(isinstance(col, list)):
             
@@ -893,7 +962,7 @@ class BKGpdf(object):
                 sample = field[c]
                 edges.append(np.arange(mmin, mmax+mbin/2.0, mbin))
                 prior_dict["PRIOR{}".format(iprior)]=self._mag_hist(sample, area, edges, col)
-        #print(prior_dict)
+
         
         return prior_dict
         
@@ -906,8 +975,6 @@ class BKGpdf(object):
         for l in bins:
             vol=vol*(l[1:-1]-l[0:-2])[0]
 
-        #print("VOLUME",vol)
-        #print("EDGES", edges)
         
         maghist = {}
         maghist['edges'] = edges

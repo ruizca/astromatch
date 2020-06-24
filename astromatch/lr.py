@@ -1,3 +1,4 @@
+
 """
 Python implementation of the likelihood ratio method for
 cross-matching two astronomical catalogues.
@@ -81,8 +82,10 @@ class LRMatch(BaseMatch):
         magbinsize=0.5,
         priors=None,
         prior_method='random',
+        random_numrepeat=200,
+        poserr_dist="rayleigh",
         prob_ratio_secondary=0.5,
-        seed=None
+        seed=None            
     ):
         """
         Performs the actual LR crossmatch between the two catalogues. The
@@ -109,7 +112,7 @@ class LRMatch(BaseMatch):
             Minimum probability ratio between best and other matchs for a
             primary source to be considered as a secondary match.
             Defaults to 0.5.
-        priors : ``Prior`` object or `None`, optional
+        priors : ``PriorND`` object or `None`, optional
             Predefined Prior object to be used in the cross-match. It has to
             be defined consistently with the magnitudes of the secondary catalogue.
             If `None`, the method set in `prior_method` is used to build the priors.
@@ -134,12 +137,30 @@ class LRMatch(BaseMatch):
             of these sources corresponds to the probability distribution of a
             spurious match.
             Defaults to 'random'.
+
+        random_numrepeat : number of random realisations in the case of prior_method=random
+            Defaults to 200.
+
+        poserr_dist : "rayleigh" of "normal". Probability distribution that describes 
+            the radial distance of two sources with positional errors. Defauls to "Rayleigh"
+
         """
+
+        assert poserr_dist.lower() in ['normal', 'rayleigh'], "xposerr_dist  should be one of normal, rayleigh"
+        assert prior_method.lower() in ['random', 'mask'], "prior_method  should be one of random, mask"
+        
+        
+
+        self.poserr_dist= poserr_dist
+
+        self.random_numrepeat = random_numrepeat
+
+        
         if self.scat.mags is None:
             raise ValueError('Secondary catalogue must contain '
                              'auxiliary data (e.g. magnitudes).')
         self.radius = radius
-
+        
         log.info('Searching for match candidates within {}...'.format(self.radius))
         mcat_pidx, mcat_sidx, mcat_d2d = self._candidates()
 
@@ -148,12 +169,11 @@ class LRMatch(BaseMatch):
             self._priors = self._calc_priors(
                 mcat_sidx, mags, magmin, magmax, magbinsize, prior_method, seed
             )
-        else:
+        else:            
             self._priors = priors
-        
-        self._bkg = BKGpdf(self.scat, mags, magmin, magmax, magbinsize)
 
-        
+        self._bkg = BKGpdf(self.scat, mags, magmin, magmax, magbinsize)
+        #sys.exit()
         log.info('Calculating likelihood ratios for match candidates...')
         lr, self._lr_all = self._likelihood_ratio(mcat_pidx, mcat_sidx, mcat_d2d)
 
@@ -277,7 +297,7 @@ class LRMatch(BaseMatch):
         pcoords = self.pcat.coords
         scoords = self.scat.coords
         pidx, sidx, d2d, _ = scoords.search_around_sky(pcoords, self.radius)
-
+        #print(pidx, sidx, ded)
         return pidx, sidx, d2d
 
     def _calc_priors(self, sidx, mags, magmin, magmax, magbinsize, method, seed):
@@ -322,7 +342,7 @@ class LRMatch(BaseMatch):
         if method == 'mask':
             rndcat = False
         elif method == 'random':
-            rndcat = self.pcat.randomise(numrepeat=200, seed=seed)
+            rndcat = self.pcat.randomise(numrepeat=self.random_numrepeat, seed=seed)
         else:
             raise ValueError('Unknown method: {}'.format(method))
 
@@ -364,7 +384,7 @@ class LRMatch(BaseMatch):
         lr[drcol] = d2d.to(u.arcsec)
         lr['ncat'] = 2
         lr['PEF'] = self._pos_err_function(d2d, pidx, sidx)
-
+        #print(lr)
         #self._qnterms(lr, self.scat.mags[sidx])
         self._lrND(lr, self.scat.mags[sidx])
 
@@ -386,16 +406,40 @@ class LRMatch(BaseMatch):
 
     ### methods for _likelihood_ratio
     def _pos_err_function(self, radius, pidx, sidx):
+
+        if(self.poserr_dist.lower()=="normal"):
+            return self._pos_err_function_normal(radius, pidx, sidx)
+        elif(self.poserr_dist.lower()=="rayleigh"):
+           return self._pos_err_function_rayleigh(radius, pidx, sidx)
+        else:
+            raise ValueError('Unknown method: {}'.format(self.poserr_dist))
+
+        
+    def _pos_err_function_rayleigh(self, radius, pidx, sidx):
         # radius is offset between opt/xray counter in arcsec
         # I assume that the pos is Gaussian.
         # NOTE: This returns prob per square *arcsec*  !!!!
         ppos_error = self.pcat.poserr[pidx].as_array()
         spos_error = self.scat.poserr[sidx].as_array()
 
+        # Rayleigh
+        sigma2 = ppos_error**2 + spos_error**2
+        exponent = -radius**2 / sigma2        
+        return np.exp(exponent) / sigma2 * 2 * radius
+
+    
+    def _pos_err_function_normal(self, radius, pidx, sidx):
+        # radius is offset between opt/xray counter in arcsec
+        # I assume that the pos is Gaussian.
+        # NOTE: This returns prob per square *arcsec*  !!!!
+        ppos_error = self.pcat.poserr[pidx].as_array()
+        spos_error = self.scat.poserr[sidx].as_array()
+
+        # Gaussian
         sigma2 = ppos_error**2 + spos_error**2
         exponent = -radius**2 / (2*sigma2)
-
         return np.exp(exponent) / (2*np.pi*sigma2)
+
 
     def _lrND(self, lr_table, mags):
 
@@ -455,7 +499,7 @@ class LRMatch(BaseMatch):
         #    print(lr_table['LR_' + col])
         
         lr_table.meta['QCAP'] = str(QCAP)
-        lr_table.write("e.fits", format='fits', overwrite=True)
+        #lr_table.write("e.fits", format='fits', overwrite=True)
         
     def _p_any_bestND(self, lr_table):
         pa_array = np.ndarray((len(lr_table), len(self._priors.prior_dict)))
@@ -533,7 +577,9 @@ class LRMatch(BaseMatch):
         pdf.close()
  
 
-        
+    """
+    # these are the old methods
+    
     def _lr(self, lr_table, mags):
 
         for magcol in self.scat.mags.colnames:
@@ -590,7 +636,7 @@ class LRMatch(BaseMatch):
 #        lr_table['REL_BEST'] = rel_array[uidx_lrbest]
 #        lr_table['LR_BEST_MAG'] = [self.scat.mags.colnames[i].encode('utf8')
 #                                   for i in idx_lrbest]
-
+    
     def _p_any_best(self, lr_table):
         pa_array = np.ndarray((len(lr_table), len(self.scat.mags.colnames)))
         pi_array = np.ndarray((len(lr_table), len(self.scat.mags.colnames)))
@@ -613,7 +659,9 @@ class LRMatch(BaseMatch):
         lr_table['prob_has_match'] = pa_array[uidx_pbest]
         lr_table['prob_this_match'] = pi_array[uidx_pbest]
 
+        
     ### ===
+    """
 
     def _final_table(self, lr_table, prob_ratio_secondary):
         """
@@ -649,16 +697,8 @@ class LRMatch(BaseMatch):
 
     def _add_match_flags(self, match, prob_ratio_secondary):
 
-        #print(match)
-        #print(match.colnames[0])
-        #print()
-
-
         ## Add match_flag column, default value to zero
         idx_flag = match.colnames.index('prob_has_match')
-        
-        #print(idx_flag)
-        #print()
         
         col_flag = Column(name='match_flag', data=[0]*len(match))
         match.add_column(col_flag, index=idx_flag)
@@ -670,7 +710,6 @@ class LRMatch(BaseMatch):
         
         ## For each primary source, find the match with maximum p_i
         pi_max = match['prob_this_match'].groups.aggregate(np.max)        
-        #print(pi_max)
         
         # The previous array has a length equal to the number of groups.
         # We need to rebuild the array having the same length as the

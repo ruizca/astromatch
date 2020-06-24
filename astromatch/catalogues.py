@@ -434,14 +434,16 @@ class Catalogue(object):
         # if data_table is a string, assumes it is the path to the data file
         if isinstance(data_table, str):
             data_table = Table.read(data_table)
-
+            
         self.ids = self._set_ids(data_table, id_col)
         self.coords = self._set_coords(data_table, coord_cols, frame)
         self.mags = self._set_mags(data_table, mag_cols)
         self.area, self.moc = self._set_area(area)
         self.poserr = self._set_poserr(data_table, poserr_cols, poserr_type)
 
+        
         self._self_apply_moc() # keep only sources within self.moc, if exists
+
 
     def __len__(self):
         return len(self.ids)
@@ -477,9 +479,9 @@ class Catalogue(object):
             If True, it returns the id labels of the sources outside `moc`.
             Defaults to False.
         """
+        
         idx = moc.contains(self.coords.ra, self.coords.dec)        
-
-        #print(idx)
+        #print(len(idx[idx]), len(self.coords))
         if len(idx) > 0:
             newcat = self[idx]
 
@@ -925,6 +927,7 @@ class Catalogue(object):
             self.ids = new.ids
             self.coords = new.coords
             self.poserr = new.poserr
+            self.mags = new.mags
             
     def _random_coords(self, a_min, a_max, r_min, r_max, numrepeat, seed):
         # a_min, a_max, r_min, r_max: Quantity type        

@@ -104,16 +104,18 @@ class Match(object):
             See the method documentation for more information.
         """
         total_moc = self.total_moc()
-
+        #print(total_moc.sky_fraction)
+        #sys.exit()
         # Crossmatch only for sources cointained in the intersection of mocs,
         # if no mocs were defined, we assume that all catalogues cover the same sky area
         if total_moc is not None:
             catalogues_inmoc = []
             for cat in self.catalogues:
+                #print(self.catalogues)
                 catalogues_inmoc.append(cat.apply_moc(total_moc))
 
             self.catalogues = catalogues_inmoc
-
+        
         # Run the crossmatch with the defined method
         method_name = '_{}__{}'.format(self.__class__.__name__, method)
         match_method = getattr(self, method_name)
@@ -131,7 +133,7 @@ class Match(object):
 
         elif len(mocs) > 1:
             moc = mocs[0].intersection(*mocs[1:])
-
+            #print(moc.sky_fraction, mocs[0].sky_fraction, mocs[1].sky_fraction)
         else:
             warnings.warn('No MOCs defined for the catalogues!')
             moc = None
