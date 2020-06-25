@@ -12,6 +12,8 @@ from __future__ import print_function
 from io import open
 
 import os
+import warnings
+from copy import deepcopy
 
 try:
     # python 3
@@ -47,20 +49,20 @@ class LRMatch(BaseMatch):
 
     _lr_all = None
     _bkg = None
-    _cutoff_column = 'LR_BEST'
+    _cutoff_column = "LR_BEST"
 
     ### Class Properties
     @property
     def lr(self):
         if self._lr_all is None:
-            raise AttributeError('Match has not been performed yet!')
+            raise AttributeError("Match has not been performed yet!")
         else:
             return self._lr_all
 
     @property
     def bkg(self):
         if self._bkg is None:
-            raise AttributeError('Match has not been performed yet!')
+            raise AttributeError("Match has not been performed yet!")
         else:
             return self._bkg
 
@@ -69,16 +71,19 @@ class LRMatch(BaseMatch):
         return self.scats[0]
 
     ### Public Methods
-    def run(self,
-        radius=6*u.arcsec,
+    def run(
+        self,
+        radius=6 * u.arcsec,
+        mags=None,
         magmin=10.0,
         magmax=30.0,
         magbinsize=0.5,
         priors=None,
-        prior_method='random',
+        prior_method="random",
+        random_numrepeat=200,
+        poserr_dist="rayleigh",
         prob_ratio_secondary=0.5,
         seed=None,
-        **kwargs
     ):
         """
         Performs the actual LR crossmatch between the two catalogues. The
@@ -91,13 +96,16 @@ class LRMatch(BaseMatch):
         radius : Astropy ``Quantity``, optional
             Distance limit for searching counterparts in the secondary
             catalogue in angular units. Defaults to 6 arcsec.
-        magmin : `float`, optional
-            Lower magnitude limit to be considered in the LR calculation.
+        mags : ``list``, optional
+            python list of catalogue column names, or combination of them. 
+            Combinations are simply a list of more than one names of catalogue columns.
+        magmin : `float` or ``list``, optional
+            Lower magnitude limit to be considered in the LR cainterplculation.
             Defaults to 10.0.
-        magmax : `float`, optional
+        magmax : `float` or ``list``, optional
             Upper magnitude limit to be considered in the LR calculation.
             Defaults to 30.0.
-        magbinsize : `float`, optional
+        magbinsize : `float` or ``list``, optional
             Magnitude bin width when estimating magnitude distributions.
             Defaults to 0.5.
         prob_ratio_secondary : `float`, optional
@@ -129,30 +137,53 @@ class LRMatch(BaseMatch):
             of these sources corresponds to the probability distribution of a
             spurious match.
             Defaults to 'random'.
+        random_numrepeat : `int`, optional
+            number of random realisations in the case of prior_method=random.
+            Defaults to 200.
+        poserr_dist : `str`, optional
+            Probability distribution that describes the radial distance of two sources
+            with positional errors. Possible values: "rayleigh" of "normal".
+            Defauls to "rayleigh".
         """
+        if poserr_dist not in ["normal", "rayleigh"]:
+            raise ValueError("poserr_dist  should be one of normal, rayleigh")
+
+        if prior_method not in ["random", "mask"]:
+            raise ValueError("prior_method  should be one of random, mask")
+
         if self.scat.mags is None:
-            raise ValueError('Secondary catalogue must contain '
-                             'auxiliary data (e.g. magnitudes).')
+            raise ValueError(
+                "Secondary catalogue must contain auxiliary data (e.g. magnitudes)."
+            )
+
         self.radius = radius
 
-        log.info('Searching for match candidates within {}...'.format(self.radius))
+        log.info("Searching for match candidates within {}...".format(self.radius))
         mcat_pidx, mcat_sidx, mcat_d2d = self._candidates()
 
+        log.info("Calculating priors...")
         if not priors:
-            log.info('Calculating priors...')
             self._priors = self._calc_priors(
-                mcat_sidx, magmin, magmax, magbinsize, prior_method, seed
+                mcat_sidx,
+                mags,
+                magmin,
+                magmax,
+                magbinsize,
+                prior_method,
+                seed,
+                random_numrepeat,
             )
         else:
-            log.info('Using user-supplied priors...')
             self._priors = priors
 
-        self._bkg = BKGpdf(self.scat, magmin, magmax, magbinsize)
+        self._bkg = BKGpdf(self.scat, mags, magmin, magmax, magbinsize)
 
-        log.info('Calculating likelihood ratios for match candidates...')
-        lr, self._lr_all = self._likelihood_ratio(mcat_pidx, mcat_sidx, mcat_d2d)
+        log.info("Calculating likelihood ratios for match candidates...")
+        lr, self._lr_all = self._likelihood_ratio(
+            mcat_pidx, mcat_sidx, mcat_d2d, poserr_dist
+        )
 
-        log.info('Sorting and flagging match results...')
+        log.info("Sorting and flagging match results...")
         match = self._final_table(lr, prob_ratio_secondary)
 
         return match
@@ -165,7 +196,7 @@ class LRMatch(BaseMatch):
         mincutoff=0.0,
         maxcutoff=10.0,
         plot_to_file=None,
-        only_primary=True
+        only_primary=True,
     ):
         """
         Calculates and store match statistics (completness and reliability)
@@ -180,27 +211,29 @@ class LRMatch(BaseMatch):
 
         if only_primary:
             # We use only primary matches
-            mask = match['match_flag'] == 1
+            mask = match["match_flag"] == 1
         else:
             # All matches
-            mask = match['ncat'] == 2
+            mask = match["ncat"] == 2
 
         lrdata = match[mask]
 
         stats = Table()
-        stats['cutoff'] = np.linspace(mincutoff, maxcutoff, num=ncutoff)
-        stats['completeness'] = np.nan
-        stats['reliability'] = np.nan
+        stats["cutoff"] = np.linspace(mincutoff, maxcutoff, num=ncutoff)
+        stats["completeness"] = np.nan
+        stats["reliability"] = np.nan
 
-        for i, lrlim in enumerate(stats['cutoff']):
-            rel_good = lrdata['REL_BEST'][lrdata[self._cutoff_column] > lrlim]
-            #CHILR[i] = float(rel_good.size)/len(self.pcat) # sample completeness
-            #stats['CHILR'][i] = np.sum(rel_good)/len(self.pcat)  # completeness
-            stats['completeness'][i] = float(rel_good.size)/len(lrdata) # completeness (AGE)
-            stats['reliability'][i] = np.mean(rel_good)                # reliability
+        for i, lrlim in enumerate(stats["cutoff"]):
+            rel_good = lrdata["REL_BEST"][lrdata[self._cutoff_column] > lrlim]
+            # CHILR[i] = float(rel_good.size)/len(self.pcat) # sample completeness
+            # stats['CHILR'][i] = np.sum(rel_good)/len(self.pcat)  # completeness
+            stats["completeness"][i] = float(rel_good.size) / len(
+                lrdata
+            )  # completeness (AGE)
+            stats["reliability"][i] = np.mean(rel_good)  # reliability
 
-        stats['error_rate'] = 1 - stats['reliability']
-        stats['CR'] = stats['completeness'] + stats['reliability']
+        stats["error_rate"] = 1 - stats["reliability"]
+        stats["CR"] = stats["completeness"] + stats["reliability"]
 
         if plot_to_file is not None:
             self._plot_stats(stats, plot_to_file)
@@ -226,32 +259,30 @@ class LRMatch(BaseMatch):
         fstats = None
         for _ in range(ntest):
             match_rnd = self._match_rndcat(**kwargs)
-    
+
             # TODO: LR ouput should be improved to simplify these selection masks
-            mask = np.logical_and(match['ncat'] == 2, match['match_flag'] == 1)
+            mask = np.logical_and(match["ncat"] == 2, match["match_flag"] == 1)
             p_any0 = match[self._cutoff_column][mask]
-    
+
             # Add sources with no matches
-            size = len(np.where(match['ncat'] == 1)[0]) - len(p_any0)
+            size = len(np.where(match["ncat"] == 1)[0]) - len(p_any0)
             p_any0 = np.concatenate((np.array(p_any0), np.zeros(size)))
-    
-            mask = np.logical_and(match_rnd['ncat'] == 2, match_rnd['match_flag'] == 1)
+
+            mask = np.logical_and(match_rnd["ncat"] == 2, match_rnd["match_flag"] == 1)
             p_any0_offset = match_rnd[self._cutoff_column][mask]
-    
+
             # Add sources with no matches
-            size = len(np.where(match_rnd['ncat'] == 1)[0]) - len(p_any0_offset)
-            p_any0_offset = np.concatenate(
-                (np.array(p_any0_offset), np.zeros(size))
-            )
-    
+            size = len(np.where(match_rnd["ncat"] == 1)[0]) - len(p_any0_offset)
+            p_any0_offset = np.concatenate((np.array(p_any0_offset), np.zeros(size)))
+
             cutoffs = np.linspace(mincutoff, maxcutoff, num=ncutoff)
-    
+
             stats = Table()
-            stats['cutoff'] = cutoffs
-            stats['completeness'] = [(p_any0 > c).mean() for c in cutoffs]
-            stats['error_rate'] = [(p_any0_offset > c).mean() for c in cutoffs]
-            stats['reliability'] = 1 - stats['error_rate']
-            stats['CR'] = stats['completeness'] + stats['reliability']
+            stats["cutoff"] = cutoffs
+            stats["completeness"] = [(p_any0 > c).mean() for c in cutoffs]
+            stats["error_rate"] = [(p_any0_offset > c).mean() for c in cutoffs]
+            stats["reliability"] = 1 - stats["error_rate"]
+            stats["CR"] = stats["completeness"] + stats["reliability"]
 
             if fstats is None:
                 fstats = stats.copy()
@@ -292,7 +323,9 @@ class LRMatch(BaseMatch):
 
         return pidx, sidx, d2d
 
-    def _calc_priors(self, sidx, magmin, magmax, magbinsize, method, seed):
+    def _calc_priors(
+        self, sidx, mags, magmin, magmax, magbinsize, method, seed, random_numrepeat
+    ):
         """
         Estimates the prior probability distribution for a source in the
         primary catalogue having a counterpart in the secondary catalogue
@@ -309,6 +342,9 @@ class LRMatch(BaseMatch):
         ----------
         sidx : numpy ``ndarray``
             Indexes of the counterparts in the secondary catalogue.
+        mags : ``list``, optional
+            python list of catalogue column names, or combination of them. 
+            Combinations are simply a list of more than one names of catalogue columns.
         magmin : `float`, optional
             Lower magnitude limit when estimating magnitude distributions.
         magmax : `float`, optional
@@ -326,19 +362,29 @@ class LRMatch(BaseMatch):
             and "spurious" sources for each available magnitude in the
             secondary catalogue.
         """
-        if method == 'mask':
-            rndcat = False
-        elif method == 'random':
-            rndcat = self.pcat.randomise(seed=seed)
-        else:
-            raise ValueError('Unknown method: {}'.format(method))
+        # print(magmin, magmax, magbinsize)
 
-        priors = Prior(self.pcat, self.scat, rndcat, self.radius,
-                       magmin, magmax, magbinsize, self.scat.mags[sidx])
+        if method == "mask":
+            rndcat = False
+
+        elif method == "random":
+            rndcat = self.pcat.randomise(numrepeat=random_numrepeat, seed=seed)
+
+        priors = Prior(
+            self.pcat,
+            self.scat,
+            rndcat,
+            self.radius,
+            mags,
+            magmin,
+            magmax,
+            magbinsize,
+            self.scat.mags[sidx],
+        )
 
         return priors
 
-    def _likelihood_ratio(self, pidx, sidx, d2d):
+    def _likelihood_ratio(self, pidx, sidx, d2d, poserr_dist):
         """
         Estimates the likelihood ratio for all counterparts and for each
         magnitude band.
@@ -360,17 +406,16 @@ class LRMatch(BaseMatch):
             Table with the likelihood ratios for each counterpart and each
             available magnitude in the secondary catalogue.
         """
-        pcat_idcol = 'SRCID_{}'.format(self.pcat.name)
-        scat_idcol = 'SRCID_{}'.format(self.scat.name)
-        drcol = 'Separation_{}_{}'.format(self.pcat.name, self.scat.name)
+        pcat_idcol = "SRCID_{}".format(self.pcat.name)
+        scat_idcol = "SRCID_{}".format(self.scat.name)
+        drcol = "Separation_{}_{}".format(self.pcat.name, self.scat.name)
 
         lr = Table()
         lr[pcat_idcol] = self.pcat.ids[pidx]
         lr[scat_idcol] = self.scat.ids[sidx]
         lr[drcol] = d2d.to(u.arcsec)
-        lr['ncat'] = 2
-        lr['PEF'] = self._pos_err_function(d2d, pidx, sidx)
-
+        lr["ncat"] = 2
+        lr["PEF"] = self._pos_err_function(d2d, pidx, sidx, poserr_dist)
         self._lr(lr, self.scat.mags[sidx])
 
         # For estimating the reliability, the table has to be grouped.
@@ -379,54 +424,88 @@ class LRMatch(BaseMatch):
         self._reliability(lr)
 
         self._p_any_best(lr)
+
         lr_all = lr.copy()
 
-        lr.keep_columns([
-            pcat_idcol,
-            scat_idcol,
-            drcol,
-            'ncat',
-            'LR_BEST',
-            'REL_BEST',
-            'LR_BEST_MAG',
-            'prob_has_match',
-            'prob_this_match',
-        ])
+        lr.keep_columns(
+            [
+                pcat_idcol,
+                scat_idcol,
+                drcol,
+                "ncat",
+                "LR_BEST",
+                "REL_BEST",
+                "LR_BEST_MAG",
+                "prob_has_match",
+                "prob_this_match",
+            ]
+        )
 
         return lr, lr_all
 
     ### methods for _likelihood_ratio
-    def _pos_err_function(self, radius, pidx, sidx):
+    def _pos_err_function(self, radius, pidx, sidx, poserr_dist):
+
+        if poserr_dist == "normal":
+            return self._pos_err_function_normal(radius, pidx, sidx)
+
+        elif poserr_dist == "rayleigh":
+            return self._pos_err_function_rayleigh(radius, pidx, sidx)
+
+        else:
+            raise ValueError("Unknown method: {}".format(poserr_dist))
+
+    def _pos_err_function_rayleigh(self, radius, pidx, sidx):
         # radius is offset between opt/xray counter in arcsec
         # I assume that the pos is Gaussian.
         # NOTE: This returns prob per square *arcsec*  !!!!
         ppos_error = self.pcat.poserr[pidx].as_array()
         spos_error = self.scat.poserr[sidx].as_array()
 
-        sigma2 = ppos_error**2 + spos_error**2
-        exponent = -radius**2 / (2*sigma2)
+        # Rayleigh
+        sigma2 = ppos_error ** 2 + spos_error ** 2
+        exponent = -(radius ** 2) / sigma2
+        return 2 * radius * np.exp(exponent) / sigma2
 
-        return np.exp(exponent) / (2*np.pi*sigma2)
+    def _pos_err_function_normal(self, radius, pidx, sidx):
+        # radius is offset between opt/xray counter in arcsec
+        # I assume that the pos is Gaussian.
+        # NOTE: This returns prob per square *arcsec*  !!!!
+        ppos_error = self.pcat.poserr[pidx].as_array()
+        spos_error = self.scat.poserr[sidx].as_array()
+
+        # Gaussian
+        sigma2 = ppos_error ** 2 + spos_error ** 2
+        exponent = -(radius ** 2) / (2 * sigma2)
+        return np.exp(exponent) / (2 * np.pi * sigma2)
 
     def _lr(self, lr_table, mags):
-        for magcol in self.scat.mags.colnames:
-            qterm = self._priors.interp(mags[magcol], magcol)
-            nterm = self._bkg.interp(mags[magcol], magcol)
+        # here the loop is over .priors.dict_prior.keys
+        # then for each [name] I define arrays
+        # I define tuples and then get the results from
+        # the prior.
 
-            lr_table['LR_' + magcol] =  lr_table['PEF'] * qterm / nterm
+        for col in self._priors.prior_dict.keys():
+            qterm = self._priors.interp(mags, col)
+            nterm = self._bkg.interp(mags, col)
+
+            lr_table["LR_" + col] = lr_table["PEF"] * qterm / nterm
+
+            # if nterm == 0 then do not assign a lr
+            lr_table["LR_" + col][nterm == 0] = 0.0
 
     def _reliability(self, lr_table):
         group_size = np.diff(lr_table.groups.indices)
 
         QCAP = []
-        for magcol in self.scat.mags.colnames:
+        for col in self._priors.magnames:
             # Overall identification ratio
-            q = self._priors.qcap(magcol)
+            q = self._priors.qcap(col)
             QCAP.append(q)
 
             # Add all values of LR for each group, i.e., all
             # matches for a source of the primary catalogue.
-            sumlr = lr_table['LR_' + magcol].groups.aggregate(np.sum)
+            sumlr = lr_table["LR_" + col].groups.aggregate(np.sum)
 
             # The previous array has a length equal to the number of groups.
             # We need to rebuild the array having the same length as the
@@ -434,60 +513,92 @@ class LRMatch(BaseMatch):
             # each element of sumlr as many times as the size of the
             # corresponding group
             sumlr = np.repeat(sumlr, group_size)
-
-            lr_table['REL_' + magcol] = lr_table['LR_' + magcol] / (sumlr + (1-q))
+            lr_table["REL_" + col] = lr_table["LR_" + col] / (sumlr + (1 - q))
 
             # Probability that the primary source has a counterpart in magcol
             # i.e. the sum of reliabilities for all matches of a given source
-            sumrel = lr_table['REL_' + magcol].groups.aggregate(np.sum)
+            sumrel = lr_table["REL_" + col].groups.aggregate(np.sum)
             sumrel = np.repeat(sumrel, group_size)
-            lr_table['p_any_' + magcol] = sumrel
+            lr_table["p_any_" + col] = sumrel
 
             # Relative probability for a given counterpart
-            lr_table['p_i_' + magcol] = (
-                lr_table['REL_' + magcol] / lr_table['p_any_' + magcol]
-            )
+            lr_table["p_i_" + col] = lr_table["REL_" + col] / lr_table["p_any_" + col]
 
-        lr_table.meta['QCAP'] = str(QCAP)
-
-#    def _lr_best(self, lr_table):
-#        lr_array = np.ndarray((len(lr_table), len(self.scat.mags.colnames)))
-#        rel_array = np.ndarray((len(lr_table), len(self.scat.mags.colnames)))
-#        for i, col in enumerate(self.scat.mags.colnames):
-#            lr_array[:, i] = lr_table['LR_' + col]
-#            rel_array[:, i] = lr_table['REL_' + col]
-#
-#        idx_lrbest = np.argmax(lr_array, axis=1)
-#        uidx_lrbest = (np.arange(len(lr_table)), idx_lrbest)
-#
-#        lr_table['LR_BEST'] = lr_array[uidx_lrbest]
-#        lr_table['REL_BEST'] = rel_array[uidx_lrbest]
-#        lr_table['LR_BEST_MAG'] = [self.scat.mags.colnames[i].encode('utf8')
-#                                   for i in idx_lrbest]
+        lr_table.meta["QCAP"] = str(QCAP)
 
     def _p_any_best(self, lr_table):
-        pa_array = np.ndarray((len(lr_table), len(self.scat.mags.colnames)))
-        pi_array = np.ndarray((len(lr_table), len(self.scat.mags.colnames)))
-        lr_array = np.ndarray((len(lr_table), len(self.scat.mags.colnames)))
-        rel_array = np.ndarray((len(lr_table), len(self.scat.mags.colnames)))
+        pa_array = np.ndarray((len(lr_table), len(self._priors.prior_dict)))
+        pi_array = np.ndarray((len(lr_table), len(self._priors.prior_dict)))
+        lr_array = np.ndarray((len(lr_table), len(self._priors.prior_dict)))
+        rel_array = np.ndarray((len(lr_table), len(self._priors.prior_dict)))
 
-        for i, col in enumerate(self.scat.mags.colnames):
-            lr_array[:, i] = lr_table['LR_' + col]
-            rel_array[:, i] = lr_table['REL_' + col]
-            pa_array[:, i] = lr_table['p_any_' + col]
-            pi_array[:, i] = lr_table['p_i_' + col]
+        names = []
+        for i, col in enumerate(self._priors.magnames):
+            lr_array[:, i] = lr_table["LR_" + col]
+            rel_array[:, i] = lr_table["REL_" + col]
+            pa_array[:, i] = lr_table["p_any_" + col]
+            pi_array[:, i] = lr_table["p_i_" + col]
+            names.append(col)
 
+        names = np.array(names)
         idx_pbest = np.argmax(pa_array, axis=1)
         uidx_pbest = (np.arange(len(lr_table)), idx_pbest)
 
-        lr_table['LR_BEST'] = lr_array[uidx_pbest]
-        lr_table['REL_BEST'] = rel_array[uidx_pbest]
-        lr_table['LR_BEST_MAG'] = [self.scat.mags.colnames[i].encode('utf8')
-                                   for i in idx_pbest]
-        lr_table['prob_has_match'] = pa_array[uidx_pbest]
-        lr_table['prob_this_match'] = pi_array[uidx_pbest]
+        lr_table["LR_BEST"] = lr_array[uidx_pbest]
+        lr_table["REL_BEST"] = rel_array[uidx_pbest]
+        lr_table["LR_BEST_MAG"] = [names[i].encode("utf8") for i in idx_pbest]
+        lr_table["prob_has_match"] = pa_array[uidx_pbest]
+        lr_table["prob_this_match"] = pi_array[uidx_pbest]
 
-    ### ===
+    def plot_stats(self, stats, ext):
+
+        import matplotlib.pyplot as plt
+        from matplotlib.backends.backend_pdf import PdfPages
+
+        plotfile = os.path.join(
+            self.MHDR,
+            self.dirs["FIELDS"],
+            self.id,
+            "LR",
+            "stats-{}_{}.pdf".format(self.id, ext),
+        )
+
+        fontPanel = {"family": "serif", "color": "black", "weight": "bold", "size": 10}
+
+        figall = []
+        pdf = PdfPages(plotfile)
+        fig, ax = plt.subplots(1, 1)
+        y = stats["completeness"]
+        x = stats["cutoff"]
+        ax.plot(x, y, "r-", label="completeness")
+        y = stats["reliability"]
+        ax.plot(x, y, "b--", label="purity")
+
+        for axis in ["top", "bottom", "left", "right"]:
+            for a in [ax]:
+                a.spines[axis].set_linewidth(2)
+                a.tick_params(labelsize=12)
+                a.xaxis.set_tick_params(which="major", width=1.5, size=8)
+                a.yaxis.set_tick_params(which="major", width=1.5, size=8)
+                a.xaxis.set_tick_params(which="minor", width=1.5, size=5)
+                a.yaxis.set_tick_params(which="minor", width=1.5, size=5)
+
+        xmax = 3
+        m = stats["cutoff"] < xmax
+        min1 = np.min(stats["completeness"][m])
+        min2 = np.min(stats["reliability"][m])
+        min1 = min(min1, min2)
+        max1 = np.max(stats["completeness"][m])
+        max2 = np.max(stats["completeness"][m])
+        max1 = max(max1, max2)
+
+        ax.set_xlim(0, xmax)
+        ax.set_ylim(min1 * 0.95, max1 * 1.05)
+        ax.grid()
+        ax.legend()
+        # plt.show()
+        pdf.savefig(fig)
+        pdf.close()
 
     def _final_table(self, lr_table, prob_ratio_secondary):
         """
@@ -504,17 +615,17 @@ class LRMatch(BaseMatch):
         pcat_idcol = lr_table.colnames[0]
 
         matched_psrcs = unique(lr_table, keys=pcat_idcol)
-        matched_psrcs.keep_columns([pcat_idcol, 'prob_has_match'])
+        matched_psrcs.keep_columns([pcat_idcol, "prob_has_match"])
 
         all_psrcs = Table()
         all_psrcs[pcat_idcol] = self.pcat.ids
-        all_psrcs['ncat'] = 1
-        all_psrcs['prob_this_match'] = 0.0
+        all_psrcs["ncat"] = 1
+        all_psrcs["prob_this_match"] = 0.0
 
-        all_psrcs = join(all_psrcs, matched_psrcs, keys=pcat_idcol, join_type='left')
+        all_psrcs = join(all_psrcs, matched_psrcs, keys=pcat_idcol, join_type="left")
         try:
-            mask = all_psrcs['prob_has_match'].mask
-            all_psrcs['prob_has_match'][mask] = 0.0
+            mask = all_psrcs["prob_has_match"].mask
+            all_psrcs["prob_has_match"][mask] = 0.0
         except AttributeError:
             # This happens when all primary sources have counterparts
             pass
@@ -522,16 +633,17 @@ class LRMatch(BaseMatch):
         return vstack([lr_table, all_psrcs])
 
     def _add_match_flags(self, match, prob_ratio_secondary):
-        ## Add match_flag column, default value to zero
-        idx_flag = match.colnames.index('prob_has_match')
-        col_flag = Column(name='match_flag', data=[0]*len(match))
+        # Add match_flag column, default value to zero
+        idx_flag = match.colnames.index("prob_has_match")
+
+        col_flag = Column(name="match_flag", data=[0] * len(match))
         match.add_column(col_flag, index=idx_flag)
 
         match = match.group_by(match.colnames[0])
         group_size = np.diff(match.groups.indices)
 
-        ## For each primary source, find the match with maximum p_i
-        pi_max = match['prob_this_match'].groups.aggregate(np.max)
+        # For each primary source, find the match with maximum p_i
+        pi_max = match["prob_this_match"].groups.aggregate(np.max)
 
         # The previous array has a length equal to the number of groups.
         # We need to rebuild the array having the same length as the
@@ -540,19 +652,22 @@ class LRMatch(BaseMatch):
         # corresponding group
         pi_max = np.repeat(pi_max, group_size)
 
-        mask = match['prob_this_match'] == pi_max
-        match['match_flag'][mask] = 1
+        mask = match["prob_this_match"] == pi_max
+        match["match_flag"][mask] = 1
 
-        ## Find secondary matches
-        mask_ratio = match['prob_this_match']/pi_max > prob_ratio_secondary
+        # Find secondary matches
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            mask_ratio = match["prob_this_match"] / pi_max > prob_ratio_secondary
+
         mask = np.logical_and(~mask, mask_ratio)
-        match['match_flag'][mask] = 2
+        match["match_flag"][mask] = 2
 
-        ## Flag as secondary matches with multiple counterparts
-        ## with LR_BEST == 0 and pi_max == 0
-        mask = np.logical_and(match['ncat'] > 1, match['LR_BEST'] == 0.0)
+        # Flag as secondary matches with multiple counterparts
+        # with LR_BEST == 0 and pi_max == 0
+        mask = np.logical_and(match["ncat"] > 1, match["LR_BEST"] == 0.0)
         mask = np.logical_and(mask, pi_max == 0)
-        match['match_flag'][mask] = 2
+        match["match_flag"][mask] = 2
 
         return match
 
@@ -566,15 +681,25 @@ class LRMatch(BaseMatch):
     def _match_rndcat(self, **kwargs):
         # Cross-match secondary catalogue with a randomized
         # version of the primary catalogue
-        xm_rnd = LRMatch(
-            self.pcat.randomise(numrepeat=1),
-            self.scat
-        )
+        log.info("Randomizing primary catalogue...")
+        original_pcat = deepcopy(self.pcat)
+        self.pcat = self.pcat.randomise(numrepeat=1)
 
         # Hide std ouput of lr match
+        log.info("Cross-matching with randomized catalogue...")
         with redirect_stdout(open(os.devnull, "w")):
-            # Use same search radius and magnitude priors as the original cross-match
-            match_rnd = xm_rnd.run(radius=self.radius, priors=self._priors, **kwargs)
+            mcat_pidx, mcat_sidx, mcat_d2d = self._candidates()
+
+            lr, _ = self._likelihood_ratio(
+                mcat_pidx, mcat_sidx, mcat_d2d, kwargs["poserr_dist"]
+            )
+
+            # The value for prob_ratio_secondary doesn't matter here,
+            # because secondary matches are not used for the statistics
+            match_rnd = self._final_table(lr, prob_ratio_secondary=0.5)
+
+        # Recover original pcat
+        self.pcat = original_pcat
 
         return match_rnd
 
@@ -583,22 +708,35 @@ class LRMatch(BaseMatch):
         # with a secondary catalogue where fake counterparts for the primary
         # have been introduced. This is for calculating statistics using
         # the Broos et al. 2006 method.
-        pcat_rnd = self.pcat.randomise(numrepeat=1)
+        original_pcat = deepcopy(self.pcat)
+        original_scat = deepcopy(self.scat)
+
+        self.pcat = self.pcat.randomise(numrepeat=1)
 
         # Create a set of fake counterparts for the primary catalogue
-        fakes = pcat_rnd.set_fake_counterparts(candidates)
+        fakes = self.pcat.set_fake_counterparts(candidates)
 
         # Remove candidates from the secondary catalogue
         scat_nocandidates = self.scat.remove_by_id(candidates.ids)
 
         # Set as secondary catalogue the union of the candidates-removed
         # secondary catalogue with the catalogue of fake counterparts
-        scat_withfakes = scat_nocandidates.join(fakes)
-
-        xm_rnd = LRMatch(pcat_rnd, scat_withfakes)
+        self.scats[0] = scat_nocandidates.join(fakes)
 
         # Hide std ouput of lr match
         with redirect_stdout(open(os.devnull, "w")):
-            match_rnd = xm_rnd.run(radius=self.radius, priors=self._priors, **kwargs)
+            mcat_pidx, mcat_sidx, mcat_d2d = self._candidates()
+
+            lr, _ = self._likelihood_ratio(
+                mcat_pidx, mcat_sidx, mcat_d2d, kwargs["poserr_dist"]
+            )
+
+            # The value for prob_ratio_secondary doesn't matter here,
+            # because secondary matches are not used for the statistics
+            match_rnd = self._final_table(lr, prob_ratio_secondary=0.5)
+
+        # Recover original catalogues
+        self.pcat = original_pcat
+        self.scats[0] = original_scat
 
         return match_rnd

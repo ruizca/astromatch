@@ -23,6 +23,7 @@ class BaseMatch(object):
     """
     Base class for Match classes.
     """
+
     def __init__(self, *args):
         self.catalogues = list(args)
 
@@ -34,7 +35,7 @@ class BaseMatch(object):
     @property
     def priors(self):
         if self._priors is None:
-            raise AttributeError('No magnitude priors defined yet!')
+            raise AttributeError("No magnitude priors defined yet!")
         else:
             try:
                 if len(self.scats) == 1:
@@ -47,12 +48,7 @@ class BaseMatch(object):
 
     ### Public methods
     def stats(
-        self,
-        match,
-        ncutoff=101,
-        mincutoff=0.0,
-        maxcutoff=1.0,
-        plot_to_file=None
+        self, match, ncutoff=101, mincutoff=0.0, maxcutoff=1.0, plot_to_file=None
     ):
         """
         Calculates match statistics (completness and reliability)
@@ -65,23 +61,23 @@ class BaseMatch(object):
         # Produce table with summary of results
 
         # We use only primary matches
-        mask = match['match_flag'] == 1
+        mask = match["match_flag"] == 1
 
         pdata = match[mask]
         reliability = self._reliability(pdata)
 
         stats = Table()
-        stats['cutoff'] = np.linspace(mincutoff, maxcutoff, num=ncutoff)
-        stats['completeness'] = np.nan
-        stats['reliability'] = np.nan
+        stats["cutoff"] = np.linspace(mincutoff, maxcutoff, num=ncutoff)
+        stats["completeness"] = np.nan
+        stats["reliability"] = np.nan
 
-        for i, plim in enumerate(stats['cutoff']):
+        for i, plim in enumerate(stats["cutoff"]):
             rel_good = reliability[pdata[self._cutoff_column] > plim]
-            stats['completeness'][i] = float(rel_good.size)/len(pdata) # AGE
-            stats['reliability'][i] = np.mean(rel_good)
+            stats["completeness"][i] = float(rel_good.size) / len(pdata)  # AGE
+            stats["reliability"][i] = np.mean(rel_good)
 
-        stats['error_rate'] = 1.0 - stats['reliability']
-        stats['CR'] = stats['completeness'] + stats['reliability']
+        stats["error_rate"] = 1.0 - stats["reliability"]
+        stats["CR"] = stats["completeness"] + stats["reliability"]
 
         if plot_to_file is not None:
             self._plot_stats(stats, plot_to_file)
@@ -107,21 +103,21 @@ class BaseMatch(object):
         fstats = None
         for _ in range(ntest):
             match_rnd = self._match_rndcat(**kwargs)
-    
-            mask = match['match_flag'] == 1
+
+            mask = match["match_flag"] == 1
             p_any0 = match[self._cutoff_column][mask]
-    
-            mask = match_rnd['match_flag'] == 1
+
+            mask = match_rnd["match_flag"] == 1
             p_any0_offset = match_rnd[self._cutoff_column][mask]
-    
+
             cutoffs = np.linspace(mincutoff, maxcutoff, num=ncutoff)
-    
+
             stats = Table()
-            stats['cutoff'] = cutoffs
-            stats['completeness'] = [(p_any0 > c).mean() for c in cutoffs]
-            stats['error_rate'] = [(p_any0_offset > c).mean() for c in cutoffs]
-            stats['reliability'] = 1 - stats['error_rate']
-            stats['CR'] = stats['completeness'] + stats['reliability']
+            stats["cutoff"] = cutoffs
+            stats["completeness"] = [(p_any0 > c).mean() for c in cutoffs]
+            stats["error_rate"] = [(p_any0_offset > c).mean() for c in cutoffs]
+            stats["reliability"] = 1 - stats["error_rate"]
+            stats["CR"] = stats["completeness"] + stats["reliability"]
 
             if fstats is None:
                 fstats = stats.copy()
@@ -156,7 +152,7 @@ class BaseMatch(object):
         # TODO: incomplete implementation, only tested with LR method (two catalogues).
         if len(self.catalogues) > 2:
             raise NotImplementedError(
-                'Broos method only implemented for two-catalogue cross-matchs'
+                "Broos method only implemented for two-catalogue cross-match"
             )
 
         # TODO: estimate uncertainties in the final statistics using e.g. bootstraping
@@ -217,14 +213,15 @@ class BaseMatch(object):
 
             cutoff = self._calc_cutoff(stats)
 
-        mask = np.logical_and(match[self._cutoff_column] > cutoff,
-                              match['match_flag'] == 1)
+        mask = np.logical_and(
+            match[self._cutoff_column] > cutoff, match["match_flag"] == 1
+        )
 
-        match['best_match_flag'] = 0
-        match['best_match_flag'][mask] = 1
+        match["best_match_flag"] = 0
+        match["best_match_flag"][mask] = 1
 
-        cutoff_str = '{} > {}'.format(self._cutoff_column, cutoff)
-        match.meta['best_match_cutoff'] = cutoff_str
+        cutoff_str = "{} > {}".format(self._cutoff_column, cutoff)
+        match.meta["best_match_cutoff"] = cutoff_str
 
         return cutoff
 
@@ -239,37 +236,44 @@ class BaseMatch(object):
             else:
                 kwargs_run[key] = value
 
-        kwargs_prior["radius"] = kwargs_run.pop('mag_include_radius', 6*u.arcsec)
-        kwargs_prior["priors"] = kwargs_run.pop('priors', None)
+        kwargs_prior["radius"] = kwargs_run.pop("mag_include_radius", 6 * u.arcsec)
+        kwargs_prior["priors"] = kwargs_run.pop("priors", None)
 
         return kwargs_prior, kwargs_run
 
     ### Internal methods
     def _calc_cutoff(self, stats, false_rate=None):
         if false_rate is None:
-            i = np.nanargmax(stats['CR'])
-            p_cutoff = stats['cutoff'][i]
+            i = np.nanargmax(stats["CR"])
+            p_cutoff = stats["cutoff"][i]
 
-            print('Optimal threshold is {}:'.format(p_cutoff))
-            message = ('Selects ~{:.0f}% of matches with '
-                       'a false detection rate of < {:.0f}%')
-            print(message.format(stats['completeness'][i]*100,
-                                 stats['error_rate'][i]*100))
+            print("Optimal threshold is {}:".format(p_cutoff))
+            message = (
+                "Selects ~{:.0f}% of matches with "
+                "a false detection rate of < {:.0f}%"
+            )
+            print(
+                message.format(
+                    stats["completeness"][i] * 100, stats["error_rate"][i] * 100
+                )
+            )
         else:
-            mask = stats['error_rate'] < false_rate
+            mask = stats["error_rate"] < false_rate
             if not mask.any():
-                message = 'A false detection rate of {}% is not possible.'
-                print(message.format(false_rate*100))
+                message = "A false detection rate of {}% is not possible."
+                print(message.format(false_rate * 100))
 
                 return None
             else:
                 i = np.min(np.where(mask)[0])
-                p_cutoff = stats['cutoff'][i]
+                p_cutoff = stats["cutoff"][i]
 
-                print('For a false detection rate of < {}%'.format(false_rate*100))
-                message = ('--> use only counterparts with cutoff > '
-                           '{:.2f} (~{:.0f}% of matches)')
-                print(message.format(p_cutoff, stats['completeness'][i]*100))
+                print("For a false detection rate of < {}%".format(false_rate * 100))
+                message = (
+                    "--> use only counterparts with cutoff > "
+                    "{:.2f} (~{:.0f}% of matches)"
+                )
+                print(message.format(p_cutoff, stats["completeness"][i] * 100))
 
         return p_cutoff
 
@@ -278,20 +282,20 @@ class BaseMatch(object):
         # as given by the pcat_idcol column.
         pos_table = Table()
         pos_table[pcat_idcol] = self.pcat.ids
-        pos_table['PORDER'] = list(range(len(self.pcat)))
+        pos_table["PORDER"] = list(range(len(self.pcat)))
 
-        match = join(match, pos_table, keys=pcat_idcol, join_type='left')
-        match['temp'] = -match['prob_this_match']  # For sorting in decreasing order
-        match.sort(['PORDER', 'ncat', 'temp'])
-        match.remove_columns(['PORDER', 'temp'])
+        match = join(match, pos_table, keys=pcat_idcol, join_type="left")
+        match["temp"] = -match["prob_this_match"]  # For sorting in decreasing order
+        match.sort(["PORDER", "ncat", "temp"])
+        match.remove_columns(["PORDER", "temp"])
 
         # Change SRCIDs of secondary sources for sources
         #  with no match from '0.0' to ''
         for cat in self.scats:
-            idcol = 'SRCID_{}'.format(cat.name)
+            idcol = "SRCID_{}".format(cat.name)
             try:
-                mask = np.char.strip(match[idcol]) == b'0.0'
-                match[idcol][mask] = ''
+                mask = np.char.strip(match[idcol]) == b"0.0"
+                match[idcol][mask] = ""
             except ValueError:
                 continue
 
@@ -301,19 +305,29 @@ class BaseMatch(object):
     def _plot_stats(stats, plotfile):
         import matplotlib.pyplot as plt
 
-        plt.figure(figsize=(6,5))
-        plt.plot(stats['cutoff'], stats['completeness'], '-', color='k', lw=2,
-                 label='completeness')
-        plt.plot(stats['cutoff'], stats['error_rate'], '--', color='r',
-                 label='false selection rate')
-        plt.plot(stats['cutoff'], 0.5*stats['CR'], ':', color='g',
-                 label='(C+R)/2')
+        plt.figure(figsize=(6, 5))
+        plt.plot(
+            stats["cutoff"],
+            stats["completeness"],
+            "-",
+            color="k",
+            lw=2,
+            label="completeness",
+        )
+        plt.plot(
+            stats["cutoff"],
+            stats["error_rate"],
+            "--",
+            color="r",
+            label="false selection rate",
+        )
+        plt.plot(stats["cutoff"], 0.5 * stats["CR"], ":", color="g", label="(C+R)/2")
 
-        plt.ylabel('fraction(> cutoff)')
-        plt.xlabel('cutoff')
-        plt.legend(loc='lower left', prop=dict(size=10))
+        plt.ylabel("fraction(> cutoff)")
+        plt.xlabel("cutoff")
+        plt.legend(loc="lower left", prop=dict(size=10))
 
-        plt.savefig(plotfile, bbox_inches='tight')
+        plt.savefig(plotfile, bbox_inches="tight")
         plt.close()
 
         log.info('created plot "{}"'.format(plotfile))

@@ -20,7 +20,8 @@ import numpy as np
 from astropy import log
 from astropy import units as u
 from astropy.coordinates import SkyCoord
-#from astropy.utils.misc import ShapedLikeNDArray
+
+# from astropy.utils.misc import ShapedLikeNDArray
 from astropy.table import Table, join, setdiff, unique, vstack
 from astropy.units.quantity import Quantity
 from astropy.utils.misc import indent
@@ -29,18 +30,18 @@ from mocpy import MOC
 
 
 # Global
-ALLSKY_AREA_DEG = (4*np.pi * u.rad**2).to(u.deg**2)
+ALLSKY_AREA_DEG = (4 * np.pi * u.rad ** 2).to(u.deg ** 2)
 
 
 class SkyCoordErr(object):
     """
     A class for the positional errors of a SkyCoord object
     """
-    # TODO: Use ShapedLikeNDArray as base object
-    ERRTYPE = ['circle', 'ellipse', 'rcd_dec_ellipse',
-               'cov_ellipse', 'cor_ellipse']
 
-    def __init__(self, data, errtype='circle', unit=None, errsys=None, check=True):
+    # TODO: Use ShapedLikeNDArray as base object
+    ERRTYPE = ["circle", "ellipse", "rcd_dec_ellipse", "cov_ellipse", "cor_ellipse"]
+
+    def __init__(self, data, errtype="circle", unit=None, errsys=None, check=True):
 
         self.errtype = self._set_errtype(errtype)
         self.components = self._set_components(data, unit)
@@ -52,10 +53,10 @@ class SkyCoordErr(object):
             self._check_components()
 
     def __repr__(self):
-        comp_str = ', '.join(self.components.colnames)
-        unit_str = ', '.join([str(col.unit) for col in self.components.itercols()])
+        comp_str = ", ".join(self.components.colnames)
+        unit_str = ", ".join([str(col.unit) for col in self.components.itercols()])
         data_str = indent(str(self.components.as_array()))
-        err_str = '<SkyCoordErr ({}): ({}) in {}\n{}>'
+        err_str = "<SkyCoordErr ({}): ({}) in {}\n{}>"
 
         return err_str.format(self.errtype, comp_str, unit_str, data_str)
 
@@ -63,29 +64,27 @@ class SkyCoordErr(object):
         item_data = self.components[key]
         if not isinstance(item_data, Table):
             # We do this because when key is an integer and the components
-            # only have one column, it returns components[key] returns a row
+            # only have one column, components[key] returns a row
             # instead of a Table.
-            item_data = self.components[key:key+1]
+            item_data = self.components[key : key + 1]
 
         return SkyCoordErr(item_data, errtype=self.errtype, check=False)
 
     def __len__(self):
         return len(self.components)
 
-    def transform_to(self, errtype='ellipse'):
+    def transform_to(self, errtype="ellipse"):
         """
         Transform errors to `errtype`
         """
-        not_implemented_errtypes = ['rcd_dec_ellipse',
-                                    'cov_ellipse',
-                                    'cor_ellipse']
+        not_implemented_errtypes = ["rcd_dec_ellipse", "cov_ellipse", "cor_ellipse"]
 
         covmatrix = self.covariance_matrix()
 
-        if errtype == 'circle':
+        if errtype == "circle":
             errs = self._to_circular(covmatrix)
 
-        elif errtype == 'ellipse':
+        elif errtype == "ellipse":
             errs = self._to_ellipse(covmatrix)
 
         elif errtype in not_implemented_errtypes:
@@ -93,7 +92,7 @@ class SkyCoordErr(object):
             raise NotImplementedError
 
         else:
-            raise ValueError('Unknown error type: {}'.format(errtype))
+            raise ValueError("Unknown error type: {}".format(errtype))
 
         return errs
 
@@ -102,13 +101,13 @@ class SkyCoordErr(object):
         Return error values as a numpy array.
         """
         errs = self.components
-        if self.errtype == 'circle':
-            #err_arrays = errs.columns[0].data << errs.columns[0].unit
+        if self.errtype == "circle":
+            # err_arrays = errs.columns[0].data << errs.columns[0].unit
             err_arrays = errs.columns[0].data * errs.columns[0].unit
         else:
             err_arrays = []
             for col in errs.itercols():
-                #err_arrays.append(col.data << col.unit)
+                # err_arrays.append(col.data << col.unit)
                 err_arrays.append(col.data * u.Unit(col.unit))
             err_arrays = np.array(err_arrays)
 
@@ -132,13 +131,13 @@ class SkyCoordErr(object):
         """
         Add systematic to the error components. Only works for circular errors.
         """
-        if self.errtype == 'circle':
+        if self.errtype == "circle":
             data = self.components.columns[0].data
             unit = self.components.columns[0].unit
             err = data * u.Unit(unit)
 
             errcol = self.components.colnames[0]
-            self.components[errcol] = np.sqrt(syserr**2 + err**2)
+            self.components[errcol] = np.sqrt(syserr ** 2 + err ** 2)
 
         else:
             raise NotImplementedError
@@ -148,7 +147,7 @@ class SkyCoordErr(object):
         Check that `errtype` is a valid value.
         """
         if errtype not in self.ERRTYPE:
-            raise ValueError('Unknown error type: {}'.format(errtype))
+            raise ValueError("Unknown error type: {}".format(errtype))
         else:
             return errtype
 
@@ -165,16 +164,16 @@ class SkyCoordErr(object):
         poserr = Table()
         for col, col_unit in zip(data.colnames, unit):
             if data[col].unit is None:
-                poserr[col] = data[col]*col_unit
+                poserr[col] = data[col] * col_unit
             else:
                 poserr[col] = data[col].to(col_unit)
 
-#            # Set bad values to zero
-#            good_mask = np.isfinite(poserr[col])
-#            poserr[col][~good_mask] = 0.0
-#
-#            negative_mask = poserr[col] < 0
-#            poserr[col][negative_mask] = 0.0
+        #            # Set bad values to zero
+        #            good_mask = np.isfinite(poserr[col])
+        #            poserr[col][~good_mask] = 0.0
+        #
+        #            negative_mask = poserr[col] < 0
+        #            poserr[col][negative_mask] = 0.0
 
         return poserr
 
@@ -187,10 +186,10 @@ class SkyCoordErr(object):
                 break
 
             if not all(np.isfinite(self.components[col])):
-                raise ValueError('Some positional errors are not finite!')
+                raise ValueError("Some positional errors are not finite!")
 
             if not all(self.components[col] > 0):
-                raise ValueError('Some positional errors are non positive!')
+                raise ValueError("Some positional errors are non positive!")
 
     def _get_default_units(self):
         """
@@ -210,14 +209,14 @@ class SkyCoordErr(object):
 
         elif self.errtype == "cov_ellipse":
             # sigma_x, sigma_y, covariance
-            units = [u.arcsec, u.arcsec, u.arcsec**2]
+            units = [u.arcsec, u.arcsec, u.arcsec ** 2]
 
         elif self.errtype == "cor_ellipse":
             # sigma_x, sigma_y, correlation
-            units = [u.arcsec, u.arcsec, u.arcsec/u.arcsec]
+            units = [u.arcsec, u.arcsec, u.arcsec / u.arcsec]
 
         else:
-            raise ValueError('Wrong errtype!')
+            raise ValueError("Wrong errtype!")
 
         return units
 
@@ -227,18 +226,20 @@ class SkyCoordErr(object):
         matrix and define a SkyCoordErr object with those components.
         """
         a, b, PA = self._covariance_to_ellipse(covmatrix)
-        errs = Table([a, b, PA], names=['eeMaj', 'eeMin', 'eePA'])
+        errs = Table([a, b, PA], names=["eeMaj", "eeMin", "eePA"])
 
-        return SkyCoordErr(errs, errtype='ellipse')
+        return SkyCoordErr(errs, errtype="ellipse")
 
     def _to_circular(self, covmatrix):
         """
         Estimate equivalent circular errors from the covariance matrix
         and define a SkyCoordErr object with those components.
         """
-        if self.errtype != 'circle':
-            message = ('Converting non-circular to circular errors! '
-                       'New errors will preserve the area.')
+        if self.errtype != "circle":
+            message = (
+                "Converting non-circular to circular errors! "
+                "New errors will preserve the area."
+            )
             warnings.warn(message, AstropyUserWarning)
 
             # The determinat of the covariance matrix is related to the
@@ -247,9 +248,9 @@ class SkyCoordErr(object):
             # r = |V|^(1/4)
             r = np.power(np.linalg.det(covmatrix), 0.25)
 
-            errs = Table([r], names=['RADEC_ERR'])
+            errs = Table([r], names=["RADEC_ERR"])
 
-            return SkyCoordErr(errs, errtype='circle')
+            return SkyCoordErr(errs, errtype="circle")
 
         else:
             return self
@@ -263,55 +264,57 @@ class SkyCoordErr(object):
 
         if self.errtype == "circle":
             if npars != 1:
-                raise ValueError('Wrong error type!')
+                raise ValueError("Wrong error type!")
             else:
-                sigma_x = np.array(errs.columns[0])*errs.columns[0].unit
-                sigma_y = np.array(errs.columns[0])*errs.columns[0].unit
-                rhoxy = np.zeros(len(sigma_x))*errs.columns[0].unit**2
+                sigma_x = np.array(errs.columns[0]) * errs.columns[0].unit
+                sigma_y = np.array(errs.columns[0]) * errs.columns[0].unit
+                rhoxy = np.zeros(len(sigma_x)) * errs.columns[0].unit ** 2
 
         elif self.errtype == "ellipse":
             if npars != 3:
-                raise ValueError('Wrong error type!')
+                raise ValueError("Wrong error type!")
             else:
-                err0 = np.array(errs.columns[0])*errs.columns[0].unit
-                err1 = np.array(errs.columns[1])*errs.columns[1].unit
-                err2 = np.array(errs.columns[2])*errs.columns[2].unit
+                err0 = np.array(errs.columns[0]) * errs.columns[0].unit
+                err1 = np.array(errs.columns[1]) * errs.columns[1].unit
+                err2 = np.array(errs.columns[2]) * errs.columns[2].unit
 
-                sigma_x = np.sqrt((err0*np.sin(err2))**2 +
-                                  (err1*np.cos(err2))**2)
-                sigma_y = np.sqrt((err0*np.cos(err2))**2 +
-                                  (err1*np.sin(err2))**2)
-                rhoxy = np.cos(err2)*np.sin(err2)*(err0**2 - err1**2)
+                sigma_x = np.sqrt(
+                    (err0 * np.sin(err2)) ** 2 + (err1 * np.cos(err2)) ** 2
+                )
+                sigma_y = np.sqrt(
+                    (err0 * np.cos(err2)) ** 2 + (err1 * np.sin(err2)) ** 2
+                )
+                rhoxy = np.cos(err2) * np.sin(err2) * (err0 ** 2 - err1 ** 2)
 
         elif self.errtype == "rcd_dec_ellipse":
             if npars != 2:
-                raise ValueError('Wrong error type!')
+                raise ValueError("Wrong error type!")
             else:
-                sigma_x = np.array(errs.columns[0])*errs.columns[0].unit
-                sigma_y = np.array(errs.columns[1])*errs.columns[1].unit
-                rhoxy = np.zeros(len(sigma_x))*errs.columns[0].unit**2
+                sigma_x = np.array(errs.columns[0]) * errs.columns[0].unit
+                sigma_y = np.array(errs.columns[1]) * errs.columns[1].unit
+                rhoxy = np.zeros(len(sigma_x)) * errs.columns[0].unit ** 2
 
         elif self.errtype == "cov_ellipse":
             if npars != 3:
-                raise ValueError('Wrong error type!')
+                raise ValueError("Wrong error type!")
             else:
-                sigma_x = np.array(errs.columns[0])*errs.columns[0].unit
-                sigma_y = np.array(errs.columns[1])*errs.columns[1].unit
-                rhoxy = np.array(errs.columns[2])*errs.columns[2].unit
+                sigma_x = np.array(errs.columns[0]) * errs.columns[0].unit
+                sigma_y = np.array(errs.columns[1]) * errs.columns[1].unit
+                rhoxy = np.array(errs.columns[2]) * errs.columns[2].unit
 
         elif self.errtype == "cor_ellipse":
             if npars != 3:
-                raise ValueError('Wrong error type!')
+                raise ValueError("Wrong error type!")
             else:
-                err0 = np.array(errs.columns[0])*errs.columns[0].unit
-                err1 = np.array(errs.columns[1])*errs.columns[1].unit
-                err2 = np.array(errs.columns[2])*errs.columns[2].unit
+                err0 = np.array(errs.columns[0]) * errs.columns[0].unit
+                err1 = np.array(errs.columns[1]) * errs.columns[1].unit
+                err2 = np.array(errs.columns[2]) * errs.columns[2].unit
 
                 sigma_x = err0
                 sigma_y = err1
-                rhoxy = err2*err0*err1
+                rhoxy = err2 * err0 * err1
         else:
-            raise ValueError('Unknown error type: {}'.format(self.errtype))
+            raise ValueError("Unknown error type: {}".format(self.errtype))
 
         return sigma_x, sigma_y, rhoxy
 
@@ -324,10 +327,10 @@ class SkyCoordErr(object):
         (Eq. 6 of Pineau+2017)
         """
         V = np.full((len(sigma_x), 2, 2), np.nan)
-        V[:, 0, 0] = sigma_x**2
+        V[:, 0, 0] = sigma_x ** 2
         V[:, 0, 1] = rhoxy
         V[:, 1, 0] = rhoxy
-        V[:, 1, 1] = sigma_y**2
+        V[:, 1, 1] = sigma_y ** 2
 
         return V
 
@@ -339,13 +342,13 @@ class SkyCoordErr(object):
 
         (Eq. 7 of Pineau+2017)
         """
-        K = (sigma_x*sigma_y)**2 - rhoxy**2
+        K = (sigma_x * sigma_y) ** 2 - rhoxy ** 2
 
         Vinv = np.full((len(sigma_x), 2, 2), np.nan)
-        Vinv[:, 0, 0] = sigma_y**2/K
-        Vinv[:, 0, 1] = -rhoxy/K
-        Vinv[:, 1, 0] = -rhoxy/K
-        Vinv[:, 1, 1] = sigma_x**2/K
+        Vinv[:, 0, 0] = sigma_y ** 2 / K
+        Vinv[:, 0, 1] = -rhoxy / K
+        Vinv[:, 1, 0] = -rhoxy / K
+        Vinv[:, 1, 1] = sigma_x ** 2 / K
 
         return Vinv
 
@@ -356,16 +359,16 @@ class SkyCoordErr(object):
         error with semi-major axis a, semi-minor axis b (in arcsec)
         and position angle PA (in degrees)
         """
-        A = V[:, 0, 0] + V[:, 1, 1] # sigma_x**2 + sigma_y**2
-        B = V[:, 1, 1] - V[:, 0, 0] # sigma_y**2 - sigma_x**2
-        C = V[:, 1, 0]              # rho*sigma_x*sigma_y
+        A = V[:, 0, 0] + V[:, 1, 1]  # sigma_x**2 + sigma_y**2
+        B = V[:, 1, 1] - V[:, 0, 0]  # sigma_y**2 - sigma_x**2
+        C = V[:, 1, 0]  # rho*sigma_x*sigma_y
 
-        a = np.sqrt((A + np.sqrt(B**2 + 4*C**2))/2)
-        b = np.sqrt((A - np.sqrt(B**2 + 4*C**2))/2)
-        PA = np.arctan2(2*C, B)/2
+        a = np.sqrt((A + np.sqrt(B ** 2 + 4 * C ** 2)) / 2)
+        b = np.sqrt((A - np.sqrt(B ** 2 + 4 * C ** 2)) / 2)
+        PA = np.arctan2(2 * C, B) / 2
         PA[PA < 0] += np.pi
 
-        return a, b, PA*(180/np.pi)
+        return a, b, PA * (180 / np.pi)
 
 
 class Catalogue(object):
@@ -424,10 +427,18 @@ class Catalogue(object):
         Source magnitudes.
     """
 
-    def __init__(self, data_table, area, name=None, id_col=None,
-                 coord_cols=['RA', 'DEC'], frame='icrs',
-                 poserr_cols=['RADEC_ERR'], poserr_type='circle',
-                 mag_cols=None):
+    def __init__(
+        self,
+        data_table,
+        area,
+        name=None,
+        id_col=None,
+        coord_cols=["RA", "DEC"],
+        frame="icrs",
+        poserr_cols=["RADEC_ERR"],
+        poserr_type="circle",
+        mag_cols=None,
+    ):
 
         self.name = self._set_name(name, data_table)
 
@@ -441,8 +452,7 @@ class Catalogue(object):
         self.area, self.moc = self._set_area(area)
         self.poserr = self._set_poserr(data_table, poserr_cols, poserr_type)
 
-        self._self_apply_moc() # keep only sources within self.moc, if exists
-
+        self._self_apply_moc()  # keep only sources within self.moc, if exists
 
     def __len__(self):
         return len(self.ids)
@@ -490,37 +500,38 @@ class Catalogue(object):
 
             newcat.area = newcat.moc.sky_fraction * ALLSKY_AREA_DEG
         else:
-            warnings.warn('No sources in moc!!!', AstropyUserWarning)
+            warnings.warn("No sources in moc!!!", AstropyUserWarning)
             newcat = None
 
         if outside:
-            idx_out = moc.contains(self.coords.icrs.ra, self.coords.icrs.dec,
-                                   keep_inside=False)
+            idx_out = moc.contains(
+                self.coords.icrs.ra, self.coords.icrs.dec, keep_inside=False
+            )
             return newcat, self.ids[idx_out]
         else:
             return newcat
 
-#    def to_moc(self, radius=1*u.arcmin, moc_order=12):
-#        """
-#        Returns a moc defining the areas around the sources
-#        of the Catalogue. It can be used as a source mask.
-#
-#        Parameters
-#        ----------
-#        radius : Astropy ``Quantity``, optional
-#            Radius of the circular area to be selected around Catalogue
-#            `coords` in units consistent with arcsec. Defaults to one arcmin
-#        moc_order : ``int``
-#            Maximum order of the resulting moc.
-#        """
-#        # PYMOC!!!
-#        moc_srcs = catalog_to_moc(self.coords, radius, moc_order, inclusive=True)
-#
-#        # Convert PYMOC to MOCPY
-#        mocdict = {order: list(cells) for order, cells in moc_srcs}
-#        moc_srcs = MOC.from_json(mocdict)
-#
-#        return moc_srcs
+    #    def to_moc(self, radius=1*u.arcmin, moc_order=12):
+    #        """
+    #        Returns a moc defining the areas around the sources
+    #        of the Catalogue. It can be used as a source mask.
+    #
+    #        Parameters
+    #        ----------
+    #        radius : Astropy ``Quantity``, optional
+    #            Radius of the circular area to be selected around Catalogue
+    #            `coords` in units consistent with arcsec. Defaults to one arcmin
+    #        moc_order : ``int``
+    #            Maximum order of the resulting moc.
+    #        """
+    #        # PYMOC!!!
+    #        moc_srcs = catalog_to_moc(self.coords, radius, moc_order, inclusive=True)
+    #
+    #        # Convert PYMOC to MOCPY
+    #        mocdict = {order: list(cells) for order, cells in moc_srcs}
+    #        moc_srcs = MOC.from_json(mocdict)
+    #
+    #        return moc_srcs
 
     def select_by_id(self, ids):
         """
@@ -533,16 +544,16 @@ class Catalogue(object):
             List of ids to be selected.
         """
         catids = Table()
-        catids['ID'] = self.ids
-        catids['IDX'] = range(len(self.ids))
+        catids["ID"] = self.ids
+        catids["IDX"] = range(len(self.ids))
 
         newids = Table()
-        newids['ID'] = ids#.columns[0]
-        newids['newIDX'] = range(len(ids))
+        newids["ID"] = ids  # .columns[0]
+        newids["newIDX"] = range(len(ids))
 
-        joincat = join(newids, catids, keys='ID', join_type='left')
-        joincat.sort('newIDX') # This way we always get the same row order as in ids
-        joinidx = joincat['IDX'].data
+        joincat = join(newids, catids, keys="ID", join_type="left")
+        joincat.sort("newIDX")  # This way we always get the same row order as in ids
+        joinidx = joincat["IDX"].data
 
         return self[joinidx]
 
@@ -556,17 +567,17 @@ class Catalogue(object):
             List of ids to be selected.
         """
         catids = Table()
-        catids['ID'] = self.ids
-        catids['IDX'] = range(len(self.ids))
+        catids["ID"] = self.ids
+        catids["IDX"] = range(len(self.ids))
 
         rmids = Table()
-        rmids['ID'] = ids
-        rmids['newIDX'] = range(len(ids))
+        rmids["ID"] = ids
+        rmids["newIDX"] = range(len(ids))
 
-        rmcat_ids = setdiff(catids, rmids, keys='ID')
-        rmcat_ids.sort('IDX')
+        rmcat_ids = setdiff(catids, rmids, keys="ID")
+        rmcat_ids.sort("IDX")
 
-        return self.select_by_id(rmcat_ids['ID'])
+        return self.select_by_id(rmcat_ids["ID"])
 
     def join(self, cat, name=None):
         """
@@ -599,13 +610,14 @@ class Catalogue(object):
             poserr_type=self.poserr.errtype,
             area=area,
             name=self.name,
-            mag_cols=mag_cols
+            mag_cols=mag_cols,
         )
 
         return join_cat
 
-    def randomise(self, r_min=20*u.arcsec, r_max=120*u.arcsec,
-                  numrepeat=10, seed=None):
+    def randomise(
+        self, r_min=20 * u.arcsec, r_max=120 * u.arcsec, numrepeat=10, seed=None
+    ):
         """
         Returns a ``Catalogue`` object with random coordinates away
         from the positions of the original catalogue.
@@ -648,14 +660,14 @@ class Catalogue(object):
         else:
             # Use seed != None only for testing, to obtain the same random catalogue
             ra, dec = self._random_coords(
-                0*u.deg, 360*u.deg, r_min, r_max, numrepeat, seed
+                0 * u.deg, 360 * u.deg, r_min, r_max, numrepeat, seed
             )
-            ids = ['RND{:06d}'.format(i) for i in range(len(ra))]
+            ids = ["RND{:06d}".format(i) for i in range(len(ra))]
 
             rnd_cat_data = Table()
-            rnd_cat_data['SRCID'] = ids
-            rnd_cat_data['RA'] = ra
-            rnd_cat_data['DEC'] = dec
+            rnd_cat_data["SRCID"] = ids
+            rnd_cat_data["RA"] = ra
+            rnd_cat_data["DEC"] = dec
 
             # This catalogue have positional errors set to zero and hence it
             # shows a warning when the random catalogue is created. We use
@@ -684,12 +696,12 @@ class Catalogue(object):
 
         # To estimate the variance for the Rayleigh distribution, we
         # circularize the errors of both catalogues:
-        pcat_poserr_circ = self.poserr.transform_to('circle')
-        cat_fake_poserr_circ = cat_fake.poserr.transform_to('circle')
+        pcat_poserr_circ = self.poserr.transform_to("circle")
+        cat_fake_poserr_circ = cat_fake.poserr.transform_to("circle")
 
         sig_fake = np.sqrt(
-            (pcat_poserr_circ.components.columns[0].to(u.deg))**2 +
-            (cat_fake_poserr_circ.components.columns[0].to(u.deg))**2
+            (pcat_poserr_circ.components.columns[0].to(u.deg)) ** 2
+            + (cat_fake_poserr_circ.components.columns[0].to(u.deg)) ** 2
         )
 
         dr = rayleigh.rvs(loc=0.0, scale=sig_fake.value)
@@ -708,7 +720,7 @@ class Catalogue(object):
 
         return cat_fake
 
-    def save(self, filename=None, format='fits', include_mags=True):
+    def save(self, filename=None, format="fits", include_mags=True):
         """
         Dump Catalogue to an Astropy Table and save it to a file.
 
@@ -725,13 +737,13 @@ class Catalogue(object):
         """
         data_table = Table()
         try:
-            data_table['SRCID_' + self.name] = self.ids
+            data_table["SRCID_" + self.name] = self.ids
         except TypeError:
             # We do this in case len(ids) = 1
-            data_table['SRCID_' + self.name] = [self.ids]
+            data_table["SRCID_" + self.name] = [self.ids]
 
-        data_table['RA'] = self.coords.ra
-        data_table['DEC'] = self.coords.dec
+        data_table["RA"] = self.coords.ra
+        data_table["DEC"] = self.coords.dec
 
         for errcol in self.poserr.components.colnames:
             data_table[errcol] = self.poserr.components[errcol]
@@ -764,23 +776,23 @@ class Catalogue(object):
         # mag: column of something
         # magfile: file with mag histogram (bin, sel, all) or None (for auto)
 
-        if self.poserr_type != 'circle':
-            raise ValueError('Nway catalogues must have circular positional errors!')
+        if self.poserr_type != "circle":
+            raise ValueError("Nway catalogues must have circular positional errors!")
 
         cat_dict = {}
-        cat_dict['name'] = self.name
-        cat_dict['srcid'] = self.ids.data
-        cat_dict['ra'] = self.coords.ra.deg
-        cat_dict['dec'] = self.coords.dec.deg
-        cat_dict['area'] = self.area.value  # sky coverage in square degrees
+        cat_dict["name"] = self.name
+        cat_dict["srcid"] = self.ids.data
+        cat_dict["ra"] = self.coords.ra.deg
+        cat_dict["dec"] = self.coords.dec.deg
+        cat_dict["area"] = self.area.value  # sky coverage in square degrees
 
         # Astrometrical errors in arcsec
         poserr = self.poserr.as_array()
-        cat_dict['error'] = poserr.to(u.arcsec).value
+        cat_dict["error"] = poserr.to(u.arcsec).value
 
         # magnitude columns
         # maghists: either (bin, sel, all) tuple or None (for auto)
-        mags, magnames = [], []
+        mags, maghists, magnames = [], [], []
         if use_mags and self.mags is not None:
             for magcol in self.mags.itercols():
                 mag_all = magcol.data
@@ -788,11 +800,12 @@ class Catalogue(object):
                 mag_all[mag_all < 0] = np.nan
 
                 mags.append(mag_all)
+                maghists.append(None)
                 magnames.append(magcol.name)
 
-        cat_dict['mags'] = mags
-        cat_dict['maghists'] = []
-        cat_dict['magnames'] = magnames
+        cat_dict["mags"] = mags
+        cat_dict["maghists"] = maghists
+        cat_dict["magnames"] = magnames
 
         return cat_dict
 
@@ -814,7 +827,7 @@ class Catalogue(object):
 
         # set ids as strings
         ids = data_table[id_col].astype(str)
-        #ids = np.array(data_table[id_col].data, dtype=str)
+        # ids = np.array(data_table[id_col].data, dtype=str)
 
         # Workaround for a bug in hdf5 with Python 3
         # In python 3 strings are unicode by default,
@@ -825,9 +838,12 @@ class Catalogue(object):
         return ids
 
     def _set_coords(self, data_table, coord_cols, frame):
-        coords = SkyCoord(ra=data_table[coord_cols[0]],
-                          dec=data_table[coord_cols[1]],
-                          unit='deg', frame=frame)
+        coords = SkyCoord(
+            ra=data_table[coord_cols[0]],
+            dec=data_table[coord_cols[1]],
+            unit="deg",
+            frame=frame,
+        )
         return coords.icrs
 
     def _set_mags(self, data_table, mag_cols):
@@ -841,6 +857,7 @@ class Catalogue(object):
         # even when the edges of the bins are passed).
         if mag_cols is not None:
             mags = data_table[mag_cols].filled(-99)
+
             for column in mag_cols:
                 good_mask = np.isfinite(mags[column])
                 mags[column][~good_mask] = -99
@@ -872,11 +889,11 @@ class Catalogue(object):
             moc, area = area, area.sky_fraction * ALLSKY_AREA_DEG
 
         elif isinstance(area, Quantity):
-            area = area.to(u.deg**2)
+            area = area.to(u.deg ** 2)
             moc = None
 
         else:
-            raise ValueError('Invalid `area` value!')
+            raise ValueError("Invalid `area` value!")
 
         return area, moc
 
@@ -891,12 +908,12 @@ class Catalogue(object):
             check = True
 
         else:
-            message = 'Positional errors are set to zero!!!'
+            message = "Positional errors are set to zero!!!"
             warnings.warn(message, AstropyUserWarning)
 
             r = np.zeros([len(data)], dtype=float) * u.arcsec
-            errs = Table([r], names=['RADEC_ERR'])
-            errtype = 'circle'
+            errs = Table([r], names=["RADEC_ERR"])
+            errtype = "circle"
             check = False
 
         return SkyCoordErr(errs, errtype=errtype, check=check)
@@ -912,17 +929,16 @@ class Catalogue(object):
 
     def _random_coords(self, a_min, a_max, r_min, r_max, numrepeat, seed):
         # a_min, a_max, r_min, r_max: Quantity type
-        num_rand  = numrepeat * len(self)
+        num_rand = numrepeat * len(self)
         np.random.seed(seed)
-        r = r_min + (r_max - r_min)*np.random.random_sample(num_rand) # large kick
-        a = a_min + (a_max - a_min)*np.random.random_sample(num_rand)
+        r = r_min + (r_max - r_min) * np.random.random_sample(num_rand)  # large kick
+        a = a_min + (a_max - a_min) * np.random.random_sample(num_rand)
 
-        dra = r.to(self.coords.ra.unit) * np.cos(a)    # offset in RA
+        dra = r.to(self.coords.ra.unit) * np.cos(a)  # offset in RA
         ddec = r.to(self.coords.dec.unit) * np.sin(a)  # offset in DEC
 
         rnd_dec = np.repeat(self.coords.dec, numrepeat) + ddec
-        rnd_ra  = np.repeat(self.coords.ra, numrepeat) \
-                  + dra/np.cos(rnd_dec)
+        rnd_ra = np.repeat(self.coords.ra, numrepeat) + dra / np.cos(rnd_dec)
 
         if self.moc is not None:
             idx = self.moc.contains(rnd_ra, rnd_dec)
@@ -937,9 +953,9 @@ class Catalogue(object):
         # No fake sources closer to `radius` arcsec with respect to the
         # original sources
         root, ext = os.path.splitext(input_file)
-        output_file = '{}_fake{}'.format(root, ext)
+        output_file = "{}_fake{}".format(root, ext)
 
-        command = ('nway-create-fake-catalogue.py --radius {} {} {}')
+        command = "nway-create-fake-catalogue.py --radius {} {} {}"
         command = command.format(radius, input_file, output_file)
         subprocess.check_output(command, shell=True)
 
@@ -972,12 +988,12 @@ def xmatch_mock_catalogues(xmatchserver_user=None, seed=None, **kwargs):
     """
     from .xmatch import XMatchServer
 
-    if 'nTab' not in kwargs:
-        raise ValueError('nTab parameter is missing!')
+    if "nTab" not in kwargs:
+        raise ValueError("nTab parameter is missing!")
 
     catalogues = []
-    cat_prefix = 'tmp_mock'
-    cat_fmt = 'fits'
+    cat_prefix = "tmp_mock"
+    cat_fmt = "fits"
 
     area = _mockcat_area(**kwargs)
 
@@ -985,22 +1001,22 @@ def xmatch_mock_catalogues(xmatchserver_user=None, seed=None, **kwargs):
 
     try:
         files_in_server = []
-        for tag in ascii_uppercase[:kwargs['nTab']]:
-            histfile_key = 'poserr{}file'.format(tag)
+        for tag in ascii_uppercase[: kwargs["nTab"]]:
+            histfile_key = "poserr{}file".format(tag)
             if histfile_key in kwargs:
                 files_in_server.append(os.path.basename(kwargs[histfile_key]))
                 xms.put(kwargs[histfile_key])
 
-        log.info('Creating mock catalogues in XMatch server...')
+        log.info("Creating mock catalogues in XMatch server...")
         with tempfile.NamedTemporaryFile() as xms_file:
             _make_xms_file(
                 xms_file.name, prefix=cat_prefix, fmt=cat_fmt, seed=seed, **kwargs
             )
             xms.run(xms_file.name)
 
-        log.info('Downloading results...')
-        for tag in ascii_uppercase[:kwargs['nTab']]:
-            cat_file = '{}{}.{}'.format(cat_prefix, tag, cat_fmt)
+        log.info("Downloading results...")
+        for tag in ascii_uppercase[: kwargs["nTab"]]:
+            cat_file = "{}{}.{}".format(cat_prefix, tag, cat_fmt)
             files_in_server.append(cat_file)
             xms.get(cat_file)
 
@@ -1009,20 +1025,20 @@ def xmatch_mock_catalogues(xmatchserver_user=None, seed=None, **kwargs):
             cat = Catalogue(
                 cat_file,
                 area=area,
-                id_col='id',
-                coord_cols=['posRA', 'posDec'],
-                poserr_cols=['ePosA', 'ePosB', 'ePosPA'],
-                poserr_type='ellipse',
-                name=tag + 'mock',
+                id_col="id",
+                coord_cols=["posRA", "posDec"],
+                poserr_cols=["ePosA", "ePosB", "ePosPA"],
+                poserr_type="ellipse",
+                name=tag + "mock",
             )
 
             catalogues.append(cat)
             os.remove(cat_file)
 
-        cat_file = '{}.{}'.format(cat_prefix, cat_fmt)
+        cat_file = "{}.{}".format(cat_prefix, cat_fmt)
         files_in_server.append(cat_file)
 
-        log.info('Delete data from the server...')
+        log.info("Delete data from the server...")
         xms.remove(*files_in_server)
         xms.logout()
 
@@ -1032,55 +1048,56 @@ def xmatch_mock_catalogues(xmatchserver_user=None, seed=None, **kwargs):
 
     return catalogues
 
-def _mockcat_area(**kwargs):
-    geometry = kwargs['geometry']
 
-    if geometry == 'allsky':
+def _mockcat_area(**kwargs):
+    geometry = kwargs["geometry"]
+
+    if geometry == "allsky":
         area = ALLSKY_AREA_DEG
 
-    elif geometry == 'cone':
-        r = kwargs['r'] * u.deg
-        area = np.pi * r**2
+    elif geometry == "cone":
+        r = kwargs["r"] * u.deg
+        area = np.pi * r ** 2
 
-    elif geometry == 'moc':
-        area = MOC.from_fits(kwargs['mocfile'])
+    elif geometry == "moc":
+        area = MOC.from_fits(kwargs["mocfile"])
 
     else:
-        raise ValueError('Unknown geometry: {}'.format(geometry))
+        raise ValueError("Unknown geometry: {}".format(geometry))
 
     return area
+
 
 def _mockcat_idcol_padwithzeros(catfile, len_idstr=None):
     cat = Table.read(catfile)
 
     if not len_idstr:
-        len_idstr = len(cat['id'][0])
+        len_idstr = len(cat["id"][0])
 
-    cat['id'] = [idstr.strip().zfill(len_idstr) for idstr in cat['id']]
+    cat["id"] = [idstr.strip().zfill(len_idstr) for idstr in cat["id"]]
     cat.write(catfile, overwrite=True)
 
-def _make_xms_file(filename, prefix='tmp_mock', fmt='fits', seed=None, **kwargs):
 
-    if 'mocfile' in kwargs:
-        kwargs['mocfile'] = os.path.basename(kwargs['mocfile'])
+def _make_xms_file(filename, prefix="tmp_mock", fmt="fits", seed=None, **kwargs):
 
-    for tag in ascii_uppercase[:kwargs['nTab']]:
-        histfile_key = 'poserr{}file'.format(tag)
+    if "mocfile" in kwargs:
+        kwargs["mocfile"] = os.path.basename(kwargs["mocfile"])
+
+    for tag in ascii_uppercase[: kwargs["nTab"]]:
+        histfile_key = "poserr{}file".format(tag)
         if histfile_key in kwargs:
             kwargs[histfile_key] = os.path.basename(kwargs[histfile_key])
 
-    args_str =  ' '.join(
-        '{}={}'.format(key, value) for key, value in kwargs.items()
-    )
+    args_str = " ".join("{}={}".format(key, value) for key, value in kwargs.items())
 
-    save_str = 'save prefix={0} suffix=.{1} common={0}.{1} format={1}'
+    save_str = "save prefix={0} suffix=.{1} common={0}.{1} format={1}"
     save_str = save_str.format(prefix, fmt)
 
-    with open(filename, 'w') as f:
-        f.write('synthetic ')
+    with open(filename, "w") as f:
+        f.write("synthetic ")
 
         if seed is not None:
-            f.write('seed={} '.format(seed))
+            f.write("seed={} ".format(seed))
 
-        f.write('{}\n'.format(args_str))
+        f.write("{}\n".format(args_str))
         f.write(save_str)

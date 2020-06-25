@@ -22,6 +22,7 @@ class Match(object):
     """
     Main class for crossmatching catalogues.
     """
+
     def __init__(self, *args, **kwargs):
         self.catalogues = self._parse_catalogues(*args, **kwargs)
 
@@ -43,7 +44,7 @@ class Match(object):
                     cat_params = {kw: kwargs[kw][i] for kw in kwargs}
                 except IndexError:
                     raise ValueError(
-                        'Some parameters were not defined for catalogue {}!'.format(i)
+                        "Some parameters were not defined for catalogue {}!".format(i)
                     )
                 area = cat_params.pop("area")
                 cat = Catalogue(cat_data, area, **cat_params)
@@ -51,7 +52,7 @@ class Match(object):
             catalogues.append(cat)
 
         return catalogues
-        
+
     def _select_sources_in_moc(self):
         total_moc = self.total_moc()
 
@@ -74,18 +75,17 @@ class Match(object):
 
         return catalogues_inmoc
 
-
     @property
     def results(self):
         if self._result is None:
-            raise AttributeError('Match has not been performed yet!')
+            raise AttributeError("Match has not been performed yet!")
         else:
             return self._result
 
     @property
     def priors(self):
         if self._match is None:
-            raise AttributeError('Match has not been performed yet!')
+            raise AttributeError("Match has not been performed yet!")
         else:
             return self._match.priors
 
@@ -110,7 +110,7 @@ class Match(object):
         else:
             raise AttributeError
 
-    def run(self, method='lr', **kwargs):
+    def run(self, method="lr", **kwargs):
         """
         Cross-matching between catalogues, using the method defined in `method`.
 
@@ -121,7 +121,7 @@ class Match(object):
         Parameters
         ----------
         method : 'lr', 'nway' or 'xmatch
-            Cross-matching method. Defaults to 'lr'
+            Cross-matching method. Defaults to 'lr'.
 
         Other Parameters
         ----------------
@@ -129,7 +129,7 @@ class Match(object):
             See the method documentation for more information.
         """
         # Run the crossmatch with the defined method
-        method_name = '_{}__{}'.format(self.__class__.__name__, method)
+        method_name = "_{}__{}".format(self.__class__.__name__, method)
         match_method = getattr(self, method_name)
         self._result = match_method(**kwargs)
 
@@ -147,12 +147,12 @@ class Match(object):
             moc = mocs[0].intersection(*mocs[1:])
 
         else:
-            warnings.warn('No MOCs defined for the catalogues!')
+            warnings.warn("No MOCs defined for the catalogues!")
             moc = None
 
         return moc
 
-    def get_matchs(self, match_type='all'):
+    def get_matchs(self, match_type="all"):
         """
         Returns an Astropy Table with matches for the primary catalogue.
 
@@ -173,33 +173,33 @@ class Match(object):
             method.
         """
         if self._result is None:
-            raise AttributeError('Match has not been performed yet!')
+            raise AttributeError("Match has not been performed yet!")
 
-        if match_type not in ['all', 'primary_all', 'primary', 'best']:
-            raise ValueError('Unknown match type: {}'.format(match_type))
+        if match_type not in ["all", "primary_all", "primary", "best"]:
+            raise ValueError("Unknown match type: {}".format(match_type))
 
-        if match_type == 'primary_all':
-            mask = self._result['match_flag'] == 1
+        if match_type == "primary_all":
+            mask = self._result["match_flag"] == 1
             matchs = self._result[mask]
 
         else:
-            mask = self._result['ncat'] > 1
+            mask = self._result["ncat"] > 1
             matchs = self._result[mask]
 
-            if match_type == 'primary':
-                mask = matchs['match_flag'] == 1
+            if match_type == "primary":
+                mask = matchs["match_flag"] == 1
                 matchs = matchs[mask]
 
-            elif match_type == 'best':
+            elif match_type == "best":
                 try:
-                    mask = matchs['best_match_flag'] == 1
+                    mask = matchs["best_match_flag"] == 1
                     matchs = matchs[mask]
                 except KeyError:
-                    raise ValueError('Best matchs not identified yet!')
+                    raise ValueError("Best matchs not identified yet!")
 
         return matchs
 
-    def offset(self, pcat_name, scat_name, match_type='primary'):
+    def offset(self, pcat_name, scat_name, match_type="primary"):
         """
         Returns the RA and Dec offsets between the matches of two catalogues.
 
@@ -218,16 +218,16 @@ class Match(object):
         """
         cat_names = self._catalogue_names()
         if not (set([pcat_name, scat_name]) <= set(cat_names)):
-            raise ValueError('Unknown catalogue name.')
+            raise ValueError("Unknown catalogue name.")
 
         matchs = self.get_matchs(match_type=match_type)
 
         pcat = self.catalogues[cat_names.index(pcat_name)]
-        pcat_srcid = matchs['SRCID_' + pcat_name]
+        pcat_srcid = matchs["SRCID_" + pcat_name]
         pcat_coords = pcat.select_by_id(pcat_srcid).coords
 
         scat = self.catalogues[cat_names.index(scat_name)]
-        scat_srcid = matchs['SRCID_' + scat_name]
+        scat_srcid = matchs["SRCID_" + scat_name]
         scat_coords = scat.select_by_id(scat_srcid).coords
 
         dra, ddec = pcat_coords.spherical_offsets_to(scat_coords)
@@ -256,7 +256,7 @@ class Match(object):
         **kwargs : Cross-matching parameters when calibrating with a random match.
         """
         if self._result is None:
-            raise AttributeError('Match has not been performed yet!')
+            raise AttributeError("Match has not been performed yet!")
 
         if cutoff is None:
             cutoff = self._calibrate_best_match(
@@ -294,14 +294,13 @@ class Match(object):
 
         return stats
 
-
     def __lr(self, **kwargs):
-        log.info('Using LR method:')
+        log.info("Using LR method:")
 
         if len(self.catalogues) > 2:
             warnings.warn(
-                'Only the first two catalogues are cross-matched using LR!!!',
-                AstropyUserWarning
+                "Only the first two catalogues are cross-matched using LR!!!",
+                AstropyUserWarning,
             )
 
         # Our current implementation of the LR method always assumes 1-sigma
@@ -317,7 +316,7 @@ class Match(object):
     def __nway(self, **kwargs):
         from .nway import NWMatch
 
-        log.info('Using NWAY method:')
+        log.info("Using NWAY method:")
 
         # The nway method always assumes 1-sigma circular positional errors.
         # Hence, we transform non-circular errors to circular errors of equal area.
@@ -328,7 +327,7 @@ class Match(object):
         return self._match.run(**kwargs)
 
     def __xmatch(self, **kwargs):
-        log.info('Using XMatch method:')
+        log.info("Using XMatch method:")
 
         self._match = XMatch(*self.catalogues)
 
@@ -340,7 +339,7 @@ class Match(object):
     def _calibrate_best_match(self, false_rate, calibrate_with_random_cat, **kwargs):
 
         if calibrate_with_random_cat:
-            log.info('Calibrating probability cutoff using a random match...')
+            log.info("Calibrating probability cutoff using a random match...")
             stats = self.stats(match_rnd=True)
         else:
             stats = self.stats()
@@ -356,8 +355,8 @@ class Match(object):
         """
         newcats = []
         for cat in catalogues:
-            if cat.poserr.errtype != 'circle':
-                errs = cat.poserr.transform_to('circle')
+            if cat.poserr.errtype != "circle":
+                errs = cat.poserr.transform_to("circle")
                 cat.poserr = errs
 
             newcats.append(cat)
