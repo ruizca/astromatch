@@ -457,19 +457,23 @@ class LRMatch(BaseMatch):
 
     def _pos_err_function_rayleigh(self, radius, pidx, sidx):
         # radius is offset between opt/xray counter in arcsec
-        # I assume that the pos is Gaussian.
-        # NOTE: This returns prob per square *arcsec*  !!!!
+        # NOTE: This returns prob per *arcsec*  !!!!
         ppos_error = self.pcat.poserr[pidx].as_array()
         spos_error = self.scat.poserr[sidx].as_array()
 
         # Rayleigh
         sigma2 = ppos_error ** 2 + spos_error ** 2
-        exponent = -(radius ** 2) / sigma2
-        return 2 * radius * np.exp(exponent) / sigma2
+        exponent = -(radius ** 2) / (2 * sigma2)
+        #return 2 * radius * np.exp(exponent) / sigma2
+        #norm = 1 / np.sqrt(2 * (np.pi * sigma2)**3)
+        #norm = 1 / sigma2
+        dr = 0.6
+        norm = dr**2 / (2 * sigma2)
+        #return norm * radius * np.exp(exponent)
+        return norm * np.exp(exponent)
 
     def _pos_err_function_normal(self, radius, pidx, sidx):
         # radius is offset between opt/xray counter in arcsec
-        # I assume that the pos is Gaussian.
         # NOTE: This returns prob per square *arcsec*  !!!!
         ppos_error = self.pcat.poserr[pidx].as_array()
         spos_error = self.scat.poserr[sidx].as_array()

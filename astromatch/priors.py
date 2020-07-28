@@ -1286,7 +1286,8 @@ class BKGpdf(object):
         maghist = {}
         maghist["edges"] = edges
         maghist["vol"] = vol
-        maghist["pdf"] = counts / vol / area  # in arcsec**2!!!
+        maghist["pdf"] = counts / vol / area  # in arcsec**-2!!!
+        #maghist["pdf"] = counts / vol / len(mags)
         maghist["name"] = col
 
         return maghist
