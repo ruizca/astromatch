@@ -77,11 +77,10 @@ class LRMatch(BaseMatch):
         mags=None,
         magmin=10.0,
         magmax=30.0,
-        magbinsize=0.5,
+        bw=None,
         priors=None,
         prior_method="random",
         random_numrepeat=200,
-        poserr_dist="rayleigh",
         prob_ratio_secondary=0.5,
         seed=None,
     ):
@@ -100,14 +99,14 @@ class LRMatch(BaseMatch):
             python list of catalogue column names, or combination of them. 
             Combinations are simply a list of more than one names of catalogue columns.
         magmin : `float` or ``list``, optional
-            Lower magnitude limit to be considered in the LR cainterplculation.
+            Lower magnitude limit to be considered in the LR calculation.
             Defaults to 10.0.
         magmax : `float` or ``list``, optional
             Upper magnitude limit to be considered in the LR calculation.
             Defaults to 30.0.
-        magbinsize : `float` or ``list``, optional
-            Magnitude bin width when estimating magnitude distributions.
-            Defaults to 0.5.
+        bw : `float`, python list of `floats` or 'None', optional
+            Bandwith used for the prior KDEs. If 'None' then it is determined
+            from the data.
         prob_ratio_secondary : `float`, optional
             Minimum probability ratio between best and other matchs for a
             primary source to be considered as a secondary match.
@@ -140,14 +139,7 @@ class LRMatch(BaseMatch):
         random_numrepeat : `int`, optional
             number of random realisations in the case of prior_method=random.
             Defaults to 200.
-        poserr_dist : `str`, optional
-            Probability distribution that describes the radial distance of two sources
-            with positional errors. Possible values: "rayleigh" of "normal".
-            Defauls to "rayleigh".
         """
-        if poserr_dist not in ["normal", "rayleigh"]:
-            raise ValueError("poserr_dist  should be one of normal, rayleigh")
-
         if prior_method not in ["random", "mask"]:
             raise ValueError("prior_method  should be one of random, mask")
 
@@ -168,7 +160,7 @@ class LRMatch(BaseMatch):
                 mags,
                 magmin,
                 magmax,
-                magbinsize,
+                bw,
                 prior_method,
                 seed,
                 random_numrepeat,
@@ -176,12 +168,10 @@ class LRMatch(BaseMatch):
         else:
             self._priors = priors
 
-        self._bkg = BKGpdf(self.scat, mags, magmin, magmax, magbinsize)
+        self._bkg = BKGpdf(self.scat, mags, magmin, magmax, bw)
 
         log.info("Calculating likelihood ratios for match candidates...")
-        lr, self._lr_all = self._likelihood_ratio(
-            mcat_pidx, mcat_sidx, mcat_d2d, poserr_dist
-        )
+        lr, self._lr_all = self._likelihood_ratio(mcat_pidx, mcat_sidx, mcat_d2d)
 
         log.info("Sorting and flagging match results...")
         match = self._final_table(lr, prob_ratio_secondary)
@@ -324,7 +314,7 @@ class LRMatch(BaseMatch):
         return pidx, sidx, d2d
 
     def _calc_priors(
-        self, sidx, mags, magmin, magmax, magbinsize, method, seed, random_numrepeat
+        self, sidx, mags, magmin, magmax, bw, method, seed, random_numrepeat
     ):
         """
         Estimates the prior probability distribution for a source in the
@@ -343,14 +333,13 @@ class LRMatch(BaseMatch):
         sidx : numpy ``ndarray``
             Indexes of the counterparts in the secondary catalogue.
         mags : ``list``, optional
-            python list of catalogue column names, or combination of them. 
-            Combinations are simply a list of more than one names of catalogue columns.
+            python list of catalogue column names, or combination of them.
+            Combinations are simply a list of more than one names of
+            catalogue columns.
         magmin : `float`, optional
             Lower magnitude limit when estimating magnitude distributions.
         magmax : `float`, optional
             Upper magnitude limit when estimating magnitude distributions.
-        magbinsize : `float`, optional
-            Magnitude bin width when estimating magnitude distributions.
         method : 'random' or 'mask'
             Method for estimating the magnitude distribution of spurious
             matches. See the documentation of ``run`` method for details.
@@ -362,8 +351,6 @@ class LRMatch(BaseMatch):
             and "spurious" sources for each available magnitude in the
             secondary catalogue.
         """
-        # print(magmin, magmax, magbinsize)
-
         if method == "mask":
             rndcat = False
 
@@ -378,13 +365,13 @@ class LRMatch(BaseMatch):
             mags,
             magmin,
             magmax,
-            magbinsize,
+            bw,
             self.scat.mags[sidx],
         )
 
         return priors
 
-    def _likelihood_ratio(self, pidx, sidx, d2d, poserr_dist):
+    def _likelihood_ratio(self, pidx, sidx, d2d):
         """
         Estimates the likelihood ratio for all counterparts and for each
         magnitude band.
@@ -415,7 +402,7 @@ class LRMatch(BaseMatch):
         lr[scat_idcol] = self.scat.ids[sidx]
         lr[drcol] = d2d.to(u.arcsec)
         lr["ncat"] = 2
-        lr["PEF"] = self._pos_err_function(d2d, pidx, sidx, poserr_dist)
+        lr["PEF"] = self._pos_err_function(d2d, pidx, sidx)
         self._lr(lr, self.scat.mags[sidx])
 
         # For estimating the reliability, the table has to be grouped.
@@ -444,54 +431,51 @@ class LRMatch(BaseMatch):
         return lr, lr_all
 
     ### methods for _likelihood_ratio
-    def _pos_err_function(self, radius, pidx, sidx, poserr_dist):
+    def _pos_err_function(self, radius, pidx, sidx, poserr_dist="normal"):
+        # radius is offset between opt/xray counter in arcsec
+        sigma2 = self._sigma_square(pidx, sidx)
 
         if poserr_dist == "normal":
-            return self._pos_err_function_normal(radius, pidx, sidx)
+            return self._pos_err_function_normal(radius, sigma2)
 
         elif poserr_dist == "rayleigh":
-            return self._pos_err_function_rayleigh(radius, pidx, sidx)
+            return self._pos_err_function_rayleigh(radius, sigma2)
 
         else:
             raise ValueError("Unknown method: {}".format(poserr_dist))
 
-    def _pos_err_function_rayleigh(self, radius, pidx, sidx):
-        # radius is offset between opt/xray counter in arcsec
-        # NOTE: This returns prob per *arcsec*  !!!!
+    def _sigma_square(self, pidx, sidx):
         ppos_error = self.pcat.poserr[pidx].as_array()
         spos_error = self.scat.poserr[sidx].as_array()
 
-        # Rayleigh
-        sigma2 = ppos_error ** 2 + spos_error ** 2
+        return ppos_error ** 2 + spos_error ** 2
+
+    @staticmethod
+    def _pos_err_function_rayleigh(radius, sigma2):
+        # NOTE: This returns prob per *arcsec*  !!!!
         exponent = -(radius ** 2) / (2 * sigma2)
-        #return 2 * radius * np.exp(exponent) / sigma2
-        #norm = 1 / np.sqrt(2 * (np.pi * sigma2)**3)
-        #norm = 1 / sigma2
-        dr = 0.6
-        norm = dr**2 / (2 * sigma2)
-        #return norm * radius * np.exp(exponent)
+        norm = 1 / sigma2
+
+        return norm * radius * np.exp(exponent)
+
+    @staticmethod
+    def _pos_err_function_normal(radius, sigma2):
+        # NOTE: This returns prob per square *arcsec*  !!!!
+        exponent = -(radius ** 2) / (2 * sigma2)
+        norm = 1 / (2 * np.pi * sigma2)
+
         return norm * np.exp(exponent)
 
-    def _pos_err_function_normal(self, radius, pidx, sidx):
-        # radius is offset between opt/xray counter in arcsec
-        # NOTE: This returns prob per square *arcsec*  !!!!
-        ppos_error = self.pcat.poserr[pidx].as_array()
-        spos_error = self.scat.poserr[sidx].as_array()
-
-        # Gaussian
-        sigma2 = ppos_error ** 2 + spos_error ** 2
-        exponent = -(radius ** 2) / (2 * sigma2)
-        return np.exp(exponent) / (2 * np.pi * sigma2)
-
     def _lr(self, lr_table, mags):
-        # here the loop is over .priors.dict_prior.keys
+        # here the loop is over _priors.magnames
         # then for each [name] I define arrays
         # I define tuples and then get the results from
         # the prior.
 
-        for col in self._priors.prior_dict.keys():
-            qterm = self._priors.interp(mags, col)
-            nterm = self._bkg.interp(mags, col)
+        for col in self._priors.magnames:
+            magcols = self._priors.prior_dict[col]["name"]
+            qterm = self._priors.interp(mags[magcols], col).flatten()
+            nterm = self._bkg.interp(mags[magcols], col).flatten() * u.arcsec ** -2
 
             lr_table["LR_" + col] = lr_table["PEF"] * qterm / nterm
 
@@ -630,6 +614,7 @@ class LRMatch(BaseMatch):
         try:
             mask = all_psrcs["prob_has_match"].mask
             all_psrcs["prob_has_match"][mask] = 0.0
+
         except AttributeError:
             # This happens when all primary sources have counterparts
             pass
@@ -694,9 +679,7 @@ class LRMatch(BaseMatch):
         with redirect_stdout(open(os.devnull, "w")):
             mcat_pidx, mcat_sidx, mcat_d2d = self._candidates()
 
-            lr, _ = self._likelihood_ratio(
-                mcat_pidx, mcat_sidx, mcat_d2d, kwargs["poserr_dist"]
-            )
+            lr, _ = self._likelihood_ratio(mcat_pidx, mcat_sidx, mcat_d2d)
 
             # The value for prob_ratio_secondary doesn't matter here,
             # because secondary matches are not used for the statistics
@@ -725,15 +708,13 @@ class LRMatch(BaseMatch):
 
         # Set as secondary catalogue the union of the candidates-removed
         # secondary catalogue with the catalogue of fake counterparts
-        self.scats[0] = scat_nocandidates.join(fakes)
+        self.scats[0] = scat_nocandidates.join(fakes, metadata_conflicts="silent")
 
         # Hide std ouput of lr match
         with redirect_stdout(open(os.devnull, "w")):
             mcat_pidx, mcat_sidx, mcat_d2d = self._candidates()
 
-            lr, _ = self._likelihood_ratio(
-                mcat_pidx, mcat_sidx, mcat_d2d, kwargs["poserr_dist"]
-            )
+            lr, _ = self._likelihood_ratio(mcat_pidx, mcat_sidx, mcat_d2d)
 
             # The value for prob_ratio_secondary doesn't matter here,
             # because secondary matches are not used for the statistics

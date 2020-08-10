@@ -579,7 +579,7 @@ class Catalogue(object):
 
         return self.select_by_id(rmcat_ids["ID"])
 
-    def join(self, cat, name=None):
+    def join(self, cat, name=None, **kwargs):
         """
         Returns a new ``Catalogue`` joining the current catalogue with 'cat'. Both
         catalogue must be consistent: same coordinates, positional errors and
@@ -592,7 +592,7 @@ class Catalogue(object):
         if name is None:
             name = self.name
 
-        join_cat_data = vstack([self.save(), cat.save()])
+        join_cat_data = vstack([self.save(), cat.save()], **kwargs)
         join_cat_data = unique(join_cat_data)
 
         try:

@@ -48,13 +48,7 @@ class NWMatch(BaseMatch):
     _cutoff_column = "prob_has_match"
 
     ### Public Methods
-    def run(
-        self,
-        radius=6 * u.arcsec,
-        use_mags=False,
-        dist_post_min=0.9,
-        **kwargs
-    ):
+    def run(self, radius=6 * u.arcsec, use_mags=False, dist_post_min=0.9, **kwargs):
         """
         Perform the cross-matching between the defined catalogues.
 
@@ -76,7 +70,7 @@ class NWMatch(BaseMatch):
         dist_post_min : ``float`` or ``None``, optional
             If not ``None``, the nway library selects associations with position-based
             probability above this value to calculate the magnitude probability priors. 
-            If not ``None``, they are estimated using ``Prior`` objects.
+            If ``None``, they are estimated using ``Prior`` objects.
             See the ``Prior`` documentation for details on how these are calculated.
             Defaults to 0.9.
         mag_include_radius : ``Quantity``, optional
