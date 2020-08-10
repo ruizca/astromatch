@@ -38,6 +38,7 @@ docs/_build
 
 # Packages/installer info
 *.egg
+*.eggs
 *.egg-info
 dist
 build
@@ -69,4 +70,6 @@ distribute-*.tar.gz
 .rtd-environment.yml
 make_test_cats.py
 
-
+docs/astromatch/*.fits
+docs/astromatch/DATA/*
+docs/astromatch/test_kde_priors.ipynb
