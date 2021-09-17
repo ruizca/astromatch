@@ -399,13 +399,22 @@ class Prior(object):
 
         return maghist
 
+    # @staticmethod
+    # def _midvals_to_bins(midvals):
+    #     dbins = np.diff(midvals) / 2
+    #     bins_lo = set(midvals[:-1] - dbins)
+    #     bins_hi = set(midvals[1:] + dbins)
+    #     bins = np.array(list(bins_lo.union(bins_hi)))
+    #     bins.sort()
+
+    #     return bins
+
     @staticmethod
     def _midvals_to_bins(midvals):
         dbins = np.diff(midvals) / 2
-        bins_lo = set(midvals[:-1] - dbins)
-        bins_hi = set(midvals[1:] + dbins)
-        bins = np.array(list(bins_lo.union(bins_hi)))
-        bins.sort()
+        bins = np.zeros_like(midvals)
+        bins[1:] = midvals[1:] + dbins
+        bins[0] = midvals[0] - dbins[0]
 
         return bins
 
