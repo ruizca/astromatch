@@ -69,7 +69,7 @@ class PriorBase(object):
     def magnames(self):
         return list(self.prior_dict.keys())
 
-    def interp(self, mags, magcol):
+    def interp(self, mags, magcol, key="target"):
         """
         Return the prior at magnitude values `mags` for prior `magcol`.
 
@@ -88,7 +88,7 @@ class PriorBase(object):
 
         prior = self.prior_dict[magcol]
 
-        return griddata(prior["grid"], prior["target"], mags, fill_value=0.0)
+        return griddata(prior["grid"], prior[key], mags, fill_value=0.0)
 
     def to_fits(self, include_bkg_priors=False, filename=None):
         """
@@ -155,8 +155,12 @@ class PriorBase(object):
         # Reshape grid array so 1D grids have the same
         # (N, D) shape as multidimensional grids
         ndim = hdu.data["grid"].ndim
-        length = len(hdu.data["grid"])
-        grid = hdu.data["grid"].reshape(length, ndim)
+
+        if ndim == 1:
+            length = len(hdu.data["grid"])
+            grid = hdu.data["grid"].reshape(length, ndim)
+        else:
+            grid = hdu.data["grid"]
 
         prior = {}
         prior["name"] = hdu.header["name"].split(",")
@@ -634,7 +638,7 @@ class Prior(PriorBase):
         if mags is None:
             mags = list(match_mags.colnames)
 
-        log.info("Using columns: {}".format(mags))
+        log.info(f"Using columns: {mags}")
 
         magmin, magmax, bw = self._parse_mag_params(mags, magmin, magmax, bw)
 
